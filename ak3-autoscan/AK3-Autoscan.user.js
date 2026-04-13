@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.2
+// @version      7.3
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -439,25 +439,30 @@
                         const saveBtn = await waitFor('button#ipSave', { timeout: 15000 });
 
                         // Re-set IPs right before Save — test may have reset the input values
+                        // Use every method: native .value, setInput events, AND jQuery .val()
                         const localBefore = document.querySelector('input#localIp');
                         const remoteBefore = document.querySelector('input#remoteIp');
+                        const jqSet = window.jQuery || window.$;
                         if (localBefore) {
                             log('localIp before save: ' + localBefore.value);
-                            if (localBefore.value !== LOCAL_IP) {
-                                setInput(localBefore, LOCAL_IP);
-                                localBefore.value = LOCAL_IP;
-                                log('Re-set localIp = ' + LOCAL_IP);
-                            }
+                            setInput(localBefore, LOCAL_IP);
+                            localBefore.value = LOCAL_IP;
+                            localBefore.setAttribute('value', LOCAL_IP);
+                            if (jqSet) jqSet(localBefore).val(LOCAL_IP).trigger('change');
+                            log('Set localIp = ' + LOCAL_IP);
                         }
                         if (remoteBefore) {
                             log('remoteIp before save: ' + remoteBefore.value);
-                            if (remoteBefore.value !== REMOTE_IP) {
-                                setInput(remoteBefore, REMOTE_IP);
-                                remoteBefore.value = REMOTE_IP;
-                                log('Re-set remoteIp = ' + REMOTE_IP);
-                            }
+                            setInput(remoteBefore, REMOTE_IP);
+                            remoteBefore.value = REMOTE_IP;
+                            remoteBefore.setAttribute('value', REMOTE_IP);
+                            if (jqSet) jqSet(remoteBefore).val(REMOTE_IP).trigger('change');
+                            log('Set remoteIp = ' + REMOTE_IP);
                         }
-                        await sleep(300);
+                        await sleep(500);
+                        // Verify values stuck
+                        log('IPs before save — localIp: ' + (localBefore ? localBefore.value : '?') +
+                            ', remoteIp: ' + (remoteBefore ? remoteBefore.value : '?'));
 
                         // Clear old message so we don't match stale text
                         const msgEl = document.querySelector('#message');
