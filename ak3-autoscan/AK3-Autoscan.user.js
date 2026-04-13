@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.0
+// @version      7.1
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -437,6 +437,28 @@
                     if (testResult === 'ok') {
                         log('AK-SM 850 funnet! — waiting for Save button...');
                         const saveBtn = await waitFor('button#ipSave', { timeout: 15000 });
+
+                        // Re-set IPs right before Save — test may have reset the input values
+                        const localBefore = document.querySelector('input#localIp');
+                        const remoteBefore = document.querySelector('input#remoteIp');
+                        if (localBefore) {
+                            log('localIp before save: ' + localBefore.value);
+                            if (localBefore.value !== LOCAL_IP) {
+                                setInput(localBefore, LOCAL_IP);
+                                localBefore.value = LOCAL_IP;
+                                log('Re-set localIp = ' + LOCAL_IP);
+                            }
+                        }
+                        if (remoteBefore) {
+                            log('remoteIp before save: ' + remoteBefore.value);
+                            if (remoteBefore.value !== REMOTE_IP) {
+                                setInput(remoteBefore, REMOTE_IP);
+                                remoteBefore.value = REMOTE_IP;
+                                log('Re-set remoteIp = ' + REMOTE_IP);
+                            }
+                        }
+                        await sleep(300);
+
                         // Clear old message so we don't match stale text
                         const msgEl = document.querySelector('#message');
                         if (msgEl) { msgEl.textContent = ''; msgEl.classList.add('hidden'); }
