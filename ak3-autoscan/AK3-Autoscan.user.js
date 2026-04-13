@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      6.8
+// @version      6.9
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -456,12 +456,6 @@
                             tick();
                         });
                         log('IPer oppdatert — verifying IP in config...');
-                        await sleep(1000);
-
-                        // Re-click IP Config tab to reload content with updated config
-                        log('Reloading IP Config tab to check updated config...');
-                        await clickTab('ipconfig');
-                        await sleep(2000);
 
                         // Check if remoteIp appears in the AK-SM850 config URL
                         const checkIp = () => {
@@ -474,25 +468,42 @@
                             return false;
                         };
 
-                        let foundConfig = checkIp();
-                        if (!foundConfig) {
-                            log(REMOTE_IP + ' not found yet — polling for up to 30s...');
-                            foundConfig = await new Promise((resolve) => {
-                                const start = Date.now();
-                                const tick = () => {
-                                    const result = checkIp();
-                                    if (result) return resolve(result);
-                                    if (Date.now() - start > 30000) return resolve(false);
-                                    setTimeout(tick, 500);
-                                };
-                                tick();
-                            });
-                        }
+                        // Wait for IP to appear, then wait 5s and check again to make sure it sticks
+                        log('Waiting for ' + REMOTE_IP + ' in config (up to 30s)...');
+                        const firstCheck = await new Promise((resolve) => {
+                            const start = Date.now();
+                            const tick = () => {
+                                const result = checkIp();
+                                if (result) return resolve(result);
+                                if (Date.now() - start > 30000) return resolve(false);
+                                setTimeout(tick, 500);
+                            };
+                            tick();
+                        });
 
-                        if (foundConfig) {
-                            log('Config verified — found: ' + foundConfig);
-                            log('IP config done — continuing to scan');
-                            setState({ plantId, step: 'scan' });
+                        if (firstCheck) {
+                            log('First check OK: ' + firstCheck);
+                            log('Waiting 5s to make sure config sticks...');
+                            await sleep(5000);
+
+                            // Re-click tab to get fresh content
+                            await clickTab('ipconfig');
+                            await sleep(2000);
+
+                            const secondCheck = checkIp();
+                            if (secondCheck) {
+                                log('Second check OK: ' + secondCheck + ' — IP confirmed stable');
+                                log('IP config done — continuing to scan');
+                                setState({ plantId, step: 'scan' });
+                            } else {
+                                log('WARNING: IP reverted to http:///html/xml.cgi — retrying');
+                                if (attempt < 4) {
+                                    setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
+                                } else {
+                                    log('Max attempts — continuing to scan anyway');
+                                    setState({ plantId, step: 'scan' });
+                                }
+                            }
                         } else {
                             log('WARNING: ' + REMOTE_IP + ' not found in config after 30s');
                             if (attempt < 4) {
