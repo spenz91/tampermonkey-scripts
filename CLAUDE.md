@@ -38,6 +38,10 @@ https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/<folder>/<sc
 
 ## How to make changes
 
+**IMPORTANT:** After EVERY change, you MUST commit and push to GitHub. Users receive updates via Tampermonkey auto-update, so changes only take effect once pushed.
+
+**IMPORTANT:** NEVER edit old local copies (e.g. `Ak3.js.txt`). ALWAYS edit files inside their subfolder (e.g. `ak3-autoscan/AK3-Autoscan.user.js`).
+
 ### 1. Edit the script
 Make changes to the `.user.js` file in the correct subfolder.
 
@@ -47,7 +51,7 @@ In the `// ==UserScript==` header, increment `@version` (e.g. 5.2 → 5.3).
 ### 3. Update the subfolder README if needed
 If workflow steps changed, update the AI reference README in the same folder.
 
-### 4. Commit and push
+### 4. Commit and push (ALWAYS do this)
 ```bash
 cd "C:\Users\ThomasKvalvåg\Documents\ak3 scan"
 git add <changed-files>
