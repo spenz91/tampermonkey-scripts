@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      5.5
+// @version      5.6
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -583,18 +583,5 @@
 
     if (getPlantIdFromHost()) {
         injectMenuButton();
-        // If state exists from an in-progress run, resume the workflow.
-        // Only clear if the state is older than 3 hours (truly stale).
-        const s = getState();
-        if (s) {
-            const age = Date.now() - (s.ts || 0);
-            if (age > 3 * 3600 * 1000) {
-                log('Clearing stale state (age: ' + Math.round(age / 60000) + ' min)');
-                clearState();
-            } else {
-                log('Resuming workflow — step: ' + s.step + ' (age: ' + Math.round(age / 1000) + 's)');
-                runAk3Setup(false);
-            }
-        }
     }
 })();
