@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      5.4
+// @version      5.5
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -364,6 +364,16 @@
                     setState({ plantId, step: 'ipconfig' });
                 }
                 else if (state.step === 'ipconfig') {
+                    // Save attempt number so we can cycle HTTPS on/off across reloads
+                    const attempt = (state.ipAttempt || 0) + 1;
+                    const httpsOn = (attempt % 2 === 1); // odd = HTTPS on, even = HTTPS off
+                    const label = 'attempt ' + attempt + ' (HTTPS ' + (httpsOn ? 'ON' : 'OFF') + ')';
+
+                    // FIRST: save state to ipconfig_wait BEFORE doing anything
+                    // This way if the test button causes a page reload, we resume at ipconfig_wait
+                    setState({ plantId, step: 'ipconfig_wait', ipAttempt: attempt });
+                    log('--- IP Config ' + label + ' ---');
+
                     log('Opening IP Config tab');
                     await clickTab('ipconfig');
                     const local  = await waitFor('input#localIp');
@@ -372,12 +382,6 @@
                     setInput(local,  LOCAL_IP);
                     log('Setting remoteIp = ' + REMOTE_IP);
                     setInput(remote, REMOTE_IP);
-
-                    // Save attempt number so we can cycle HTTPS on/off across reloads
-                    const attempt = (state.ipAttempt || 0) + 1;
-                    const httpsOn = (attempt % 2 === 1); // odd = HTTPS on, even = HTTPS off
-                    const label = 'attempt ' + attempt + ' (HTTPS ' + (httpsOn ? 'ON' : 'OFF') + ')';
-                    log('--- IP Config ' + label + ' ---');
 
                     const h = await waitFor('input#httpsForm');
                     log('HTTPS checkbox found — checked: ' + h.checked);
@@ -396,22 +400,14 @@
                     }
                     await sleep(300);
 
-                    // Save state BEFORE clicking test (in case it causes a reload)
-                    setState({ plantId, step: 'ipconfig_wait', ipAttempt: attempt });
-
                     log('Clicking "Test tilkobling til AK-SM850"');
                     const ipFormBtn = await waitFor('input#ipForm');
                     enableButton(ipFormBtn);
                     clickEl(ipFormBtn, 'Test tilkobling til AK-SM850 (' + label + ')');
-                    try {
-                        const form = ipFormBtn.closest('form');
-                        if (form && typeof form.requestSubmit === 'function') form.requestSubmit(ipFormBtn);
-                        else if (form) form.submit();
-                    } catch (e) {}
+                    // Do NOT submit the form directly — it causes immediate navigation
+                    // before GM_setValue can persist. Let the click handler do its thing.
                     log('Waiting for test result (6s)...');
                     await sleep(6000);
-                    // If we get here without a reload, fall through to ipconfig_wait
-                    setState({ plantId, step: 'ipconfig_wait', ipAttempt: attempt });
                 }
                 else if (state.step === 'ipconfig_wait') {
                     log('Checking for Save button after test...');
