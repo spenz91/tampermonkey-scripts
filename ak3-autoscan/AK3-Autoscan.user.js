@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      6.3
+// @version      6.4
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -435,56 +435,30 @@
                     log('Test result: ' + testResult);
 
                     if (testResult === 'ok') {
-                        // Test succeeded — wait for Save button to be visible, then click it
                         log('AK-SM 850 funnet! — waiting for Save button...');
                         const saveBtn = await waitFor('button#ipSave', { timeout: 15000 });
-                        await sleep(500);
-                        // Clear any old message so waitForText doesn't match stale text
+                        // Clear old message so we don't match stale text
                         const msgEl = document.querySelector('#message');
                         if (msgEl) { msgEl.textContent = ''; msgEl.classList.add('hidden'); }
                         log('Clicking Save');
                         clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
-                        log('Waiting for "IPer oppdatert" confirmation (up to 30s)...');
-                        try {
-                            // Wait for #message to contain text AND not be hidden
-                            await new Promise((resolve, reject) => {
-                                const start = Date.now();
-                                const tick = () => {
-                                    const el = document.querySelector('#message');
-                                    if (el && !el.classList.contains('hidden') && el.textContent.includes('IPer oppdatert')) {
-                                        return resolve();
-                                    }
-                                    if (Date.now() - start > 30000) return reject(new Error('timeout'));
-                                    setTimeout(tick, 200);
-                                };
-                                tick();
-                            });
-                            log('IPer oppdatert — verifying config...');
-                            await sleep(1000);
-                            // Verify AK-SM850 config shows the correct remote IP
-                            const configText = document.querySelector('#content') ? document.querySelector('#content').textContent : '';
-                            const hasCorrectIp = configText.includes(REMOTE_IP);
-                            log('AK-SM850 config contains ' + REMOTE_IP + ': ' + hasCorrectIp);
-                            if (!hasCorrectIp) {
-                                log('WARNING: Config IP does not match — retrying');
-                                if (attempt < 4) {
-                                    setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
-                                    await sleep(500);
-                                    continue;
+                        log('Waiting for "IPer oppdatert"...');
+                        await new Promise((resolve, reject) => {
+                            const start = Date.now();
+                            const tick = () => {
+                                const el = document.querySelector('#message');
+                                if (el && !el.classList.contains('hidden') && el.textContent.includes('IPer oppdatert')) {
+                                    return resolve();
                                 }
-                            }
-                            log('IP addresses confirmed updated');
-                            setState({ plantId, step: 'scan' });
-                        } catch {
-                            log('"IPer oppdatert" not received — retrying');
-                            if (attempt >= 4) {
-                                log('All attempts exhausted — waiting for manual fix');
-                                await waitForText('#message', 'IPer oppdatert', { timeout: 24 * 3600 * 1000 });
-                                setState({ plantId, step: 'scan' });
-                            } else {
-                                setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
-                            }
-                        }
+                                if (Date.now() - start > 30000) return reject(new Error('timeout'));
+                                setTimeout(tick, 200);
+                            };
+                            tick();
+                        });
+                        log('IPer oppdatert — waiting 3s...');
+                        await sleep(3000);
+                        log('IP config done — continuing to scan');
+                        setState({ plantId, step: 'scan' });
                     } else {
                         // Test failed — retry with different HTTPS or fall back to manual
                         if (attempt >= 4) {
