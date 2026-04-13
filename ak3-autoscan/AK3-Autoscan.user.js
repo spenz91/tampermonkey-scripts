@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      6.6
+// @version      6.7
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -456,23 +456,22 @@
                             tick();
                         });
                         log('IPer oppdatert — verifying config...');
-                        // Wait for AK-SM850 config to show the remoteIp in the URL
-                        const remoteIpValue = document.querySelector('input#remoteIp') ? document.querySelector('input#remoteIp').value : REMOTE_IP;
-                        log('Waiting for config to contain remoteIp: ' + remoteIpValue + ' (up to 30s)...');
+                        // Always use the constant — input fields may reset after save
+                        log('Waiting for config to contain remoteIp: ' + REMOTE_IP + ' (up to 30s)...');
                         const configOk = await new Promise((resolve) => {
                             const start = Date.now();
                             const tick = () => {
                                 const contentText = document.querySelector('#content') ? document.querySelector('#content').textContent : '';
-                                if (contentText.includes(remoteIpValue)) return resolve(true);
+                                if (contentText.includes(REMOTE_IP)) return resolve(true);
                                 if (Date.now() - start > 30000) return resolve(false);
                                 setTimeout(tick, 500);
                             };
                             tick();
                         });
                         if (configOk) {
-                            log('Config verified — remoteIp ' + remoteIpValue + ' found');
+                            log('Config verified — ' + REMOTE_IP + ' found in AK-SM850 config');
                         } else {
-                            log('WARNING: remoteIp ' + remoteIpValue + ' not found in config after 30s');
+                            log('WARNING: ' + REMOTE_IP + ' not found in config after 30s');
                         }
                         await sleep(1000);
                         log('IP config done — continuing to scan');
