@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      5.7
+// @version      5.8
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -406,21 +406,39 @@
                     clickEl(ipFormBtn, 'Test tilkobling til AK-SM850 (' + label + ')');
                     // Do NOT submit the form directly — it causes immediate navigation
                     // before GM_setValue can persist. Let the click handler do its thing.
-                    log('Waiting for test result (6s)...');
-                    await sleep(6000);
+                    log('Waiting for test result (up to 30s)...');
+                    // Poll for result instead of fixed sleep — check if #remoteIpOk becomes visible
+                    // or if #remoteIp gets class "invalid"
+                    const testResult = await new Promise((resolve) => {
+                        const start = Date.now();
+                        const tick = () => {
+                            const okDiv = document.querySelector('#remoteIpOk');
+                            if (okDiv && okDiv.style.display !== 'none') {
+                                return resolve('ok');
+                            }
+                            const remoteInput = document.querySelector('#remoteIp');
+                            if (remoteInput && remoteInput.classList.contains('invalid')) {
+                                return resolve('invalid');
+                            }
+                            if (Date.now() - start > 30000) return resolve('timeout');
+                            setTimeout(tick, 500);
+                        };
+                        tick();
+                    });
+                    log('Test result: ' + testResult);
                 }
                 else if (state.step === 'ipconfig_wait') {
-                    log('Checking for Save button after test...');
+                    log('Checking test result on IP Config...');
                     await clickTab('ipconfig');
-                    await sleep(1000);
+                    await sleep(2000);
 
-                    let saveBtn = document.querySelector('button#ipSave');
-                    if (!saveBtn) {
-                        log('Save button not visible — waiting 5s more...');
-                        await sleep(5000);
-                        saveBtn = document.querySelector('button#ipSave');
-                    }
-                    if (!saveBtn) {
+                    // Check if the test succeeded: #remoteIpOk visible means save button is usable
+                    // #remoteIp.invalid or #remoteIpOk hidden means test failed
+                    const okDiv = document.querySelector('#remoteIpOk');
+                    const isVisible = okDiv && okDiv.style.display !== 'none';
+                    log('#remoteIpOk visible: ' + isVisible);
+
+                    if (!isVisible) {
                         const attempt = state.ipAttempt || 1;
                         if (attempt >= 4) {
                             log('All 4 attempts failed — waiting for manual fix');
@@ -444,20 +462,21 @@
                             if (!cont) { clearState(); return; }
                             setState({ plantId, step: 'scan' });
                         } else {
-                            log('Save button not visible after attempt ' + attempt + ' — retrying with different HTTPS');
+                            log('Test failed on attempt ' + attempt + ' — retrying with different HTTPS');
                             setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
                         }
                     } else {
-                        log('Save button found — clicking');
+                        log('AK-SM 850 funnet! — clicking Save');
+                        const saveBtn = document.querySelector('button#ipSave');
                         clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
-                        log('Waiting for "IPer oppdatert" confirmation (up to 15s)...');
+                        log('Waiting for "IPer oppdatert" confirmation (up to 30s)...');
                         try {
-                            await waitForText('#message', 'IPer oppdatert', { timeout: 15000 });
+                            await waitForText('#message', 'IPer oppdatert', { timeout: 30000 });
                             log('IP addresses confirmed updated');
                             setState({ plantId, step: 'scan' });
                         } catch {
                             const attempt = state.ipAttempt || 1;
-                            log('"IPer oppdatert" not received — save failed (attempt ' + attempt + ')');
+                            log('"IPer oppdatert" not received after 30s — save failed (attempt ' + attempt + ')');
                             if (attempt >= 4) {
                                 log('All attempts exhausted — waiting for manual fix');
                                 await waitForText('#message', 'IPer oppdatert', { timeout: 24 * 3600 * 1000 });
