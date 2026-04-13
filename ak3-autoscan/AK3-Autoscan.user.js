@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      6.0
+// @version      6.1
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -435,9 +435,11 @@
                     log('Test result: ' + testResult);
 
                     if (testResult === 'ok') {
-                        // Test succeeded — save immediately without re-clicking the tab
-                        log('AK-SM 850 funnet! — clicking Save');
-                        const saveBtn = document.querySelector('button#ipSave');
+                        // Test succeeded — wait for Save button to be visible, then click it
+                        log('AK-SM 850 funnet! — waiting for Save button...');
+                        const saveBtn = await waitFor('button#ipSave', { timeout: 15000 });
+                        await sleep(500);
+                        log('Clicking Save');
                         clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
                         log('Waiting for "IPer oppdatert" confirmation (up to 30s)...');
                         try {
