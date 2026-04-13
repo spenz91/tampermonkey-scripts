@@ -4,8 +4,8 @@
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/AK3-Autoscan.user.js
-// @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/AK3-Autoscan.user.js
+// @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/ak3-autoscan/AK3-Autoscan.user.js
+// @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/ak3-autoscan/AK3-Autoscan.user.js
 // @match        http://*.plants.iwmac.local:8080/secure/ak3_setup/*
 // @grant        GM_setValue
 // @grant        GM_getValue
