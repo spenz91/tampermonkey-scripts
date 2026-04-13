@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      6.5
+// @version      6.6
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -455,22 +455,26 @@
                             };
                             tick();
                         });
-                        log('IPer oppdatert — waiting 3s...');
-                        await sleep(3000);
-                        // Verify "Server config satt til" matches localIp
-                        const localIpValue = document.querySelector('input#localIp') ? document.querySelector('input#localIp').value : LOCAL_IP;
-                        const configEm = document.querySelector('#content em');
-                        const serverConfig = configEm ? configEm.textContent : '';
-                        log('Server config: ' + serverConfig + ' — localIp: ' + localIpValue);
-                        if (serverConfig && !serverConfig.includes(localIpValue)) {
-                            log('WARNING: Server config IP does not match localIp — retrying');
-                            if (attempt < 4) {
-                                setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
-                                await sleep(500);
-                                continue;
-                            }
-                            log('Max attempts reached — continuing anyway');
+                        log('IPer oppdatert — verifying config...');
+                        // Wait for AK-SM850 config to show the remoteIp in the URL
+                        const remoteIpValue = document.querySelector('input#remoteIp') ? document.querySelector('input#remoteIp').value : REMOTE_IP;
+                        log('Waiting for config to contain remoteIp: ' + remoteIpValue + ' (up to 30s)...');
+                        const configOk = await new Promise((resolve) => {
+                            const start = Date.now();
+                            const tick = () => {
+                                const contentText = document.querySelector('#content') ? document.querySelector('#content').textContent : '';
+                                if (contentText.includes(remoteIpValue)) return resolve(true);
+                                if (Date.now() - start > 30000) return resolve(false);
+                                setTimeout(tick, 500);
+                            };
+                            tick();
+                        });
+                        if (configOk) {
+                            log('Config verified — remoteIp ' + remoteIpValue + ' found');
+                        } else {
+                            log('WARNING: remoteIp ' + remoteIpValue + ' not found in config after 30s');
                         }
+                        await sleep(1000);
                         log('IP config done — continuing to scan');
                         setState({ plantId, step: 'scan' });
                     } else {
