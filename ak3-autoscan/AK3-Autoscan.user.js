@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      6.1
+// @version      6.2
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -439,11 +439,26 @@
                         log('AK-SM 850 funnet! — waiting for Save button...');
                         const saveBtn = await waitFor('button#ipSave', { timeout: 15000 });
                         await sleep(500);
+                        // Clear any old message so waitForText doesn't match stale text
+                        const msgEl = document.querySelector('#message');
+                        if (msgEl) { msgEl.textContent = ''; msgEl.classList.add('hidden'); }
                         log('Clicking Save');
                         clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
                         log('Waiting for "IPer oppdatert" confirmation (up to 30s)...');
                         try {
-                            await waitForText('#message', 'IPer oppdatert', { timeout: 30000 });
+                            // Wait for #message to contain text AND not be hidden
+                            await new Promise((resolve, reject) => {
+                                const start = Date.now();
+                                const tick = () => {
+                                    const el = document.querySelector('#message');
+                                    if (el && !el.classList.contains('hidden') && el.textContent.includes('IPer oppdatert')) {
+                                        return resolve();
+                                    }
+                                    if (Date.now() - start > 30000) return reject(new Error('timeout'));
+                                    setTimeout(tick, 200);
+                                };
+                                tick();
+                            });
                             log('IP addresses confirmed updated');
                             setState({ plantId, step: 'scan' });
                         } catch {
