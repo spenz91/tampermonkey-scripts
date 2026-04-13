@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      5.9
+// @version      6.0
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -381,8 +381,15 @@
                     const remote = await waitFor('input#remoteIp');
                     log('Setting localIp = ' + LOCAL_IP);
                     setInput(local,  LOCAL_IP);
+                    local.value = LOCAL_IP;
                     log('Setting remoteIp = ' + REMOTE_IP);
                     setInput(remote, REMOTE_IP);
+                    remote.value = REMOTE_IP;
+                    await sleep(500);
+                    // Verify IPs are set correctly
+                    if (local.value !== LOCAL_IP) { local.value = LOCAL_IP; log('localIp re-forced'); }
+                    if (remote.value !== REMOTE_IP) { remote.value = REMOTE_IP; log('remoteIp re-forced'); }
+                    log('IPs confirmed — localIp: ' + local.value + ', remoteIp: ' + remote.value);
 
                     // Then toggle HTTPS
                     const h = await waitFor('input#httpsForm');
