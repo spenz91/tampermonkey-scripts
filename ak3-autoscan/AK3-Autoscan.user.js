@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.3
+// @version      7.4
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -364,232 +364,135 @@
                     setState({ plantId, step: 'ipconfig' });
                 }
                 else if (state.step === 'ipconfig') {
-                    // Save attempt number so we can cycle HTTPS on/off across reloads
-                    const attempt = (state.ipAttempt || 0) + 1;
-                    const httpsOn = (attempt % 2 === 1); // odd = HTTPS on, even = HTTPS off
-                    const label = 'attempt ' + attempt + ' (HTTPS ' + (httpsOn ? 'ON' : 'OFF') + ')';
-
-                    // Save state BEFORE doing anything so page reload resumes at ipconfig_wait
-                    setState({ plantId, step: 'ipconfig_wait', ipAttempt: attempt });
-                    log('--- IP Config ' + label + ' ---');
-
                     log('Opening IP Config tab');
                     await clickTab('ipconfig');
-
-                    // Set IP addresses first
                     const local  = await waitFor('input#localIp');
                     const remote = await waitFor('input#remoteIp');
                     log('Setting localIp = ' + LOCAL_IP);
                     setInput(local,  LOCAL_IP);
-                    local.value = LOCAL_IP;
                     log('Setting remoteIp = ' + REMOTE_IP);
                     setInput(remote, REMOTE_IP);
-                    remote.value = REMOTE_IP;
-                    await sleep(500);
-                    // Verify IPs are set correctly
-                    if (local.value !== LOCAL_IP) { local.value = LOCAL_IP; log('localIp re-forced'); }
-                    if (remote.value !== REMOTE_IP) { remote.value = REMOTE_IP; log('remoteIp re-forced'); }
-                    log('IPs confirmed — localIp: ' + local.value + ', remoteIp: ' + remote.value);
 
-                    // Then toggle HTTPS
-                    const h = await waitFor('input#httpsForm');
-                    log('HTTPS checkbox found — checked: ' + h.checked);
-                    if (httpsOn && !h.checked) {
+                    log('Waiting for HTTPS checkbox...');
+                    const https = await waitFor('input#httpsForm');
+                    log('HTTPS checkbox found — checked: ' + https.checked);
+                    if (!https.checked) {
                         log('Enabling HTTPS checkbox');
-                        clickEl(h, 'HTTPS checkbox (on)');
-                    } else if (!httpsOn && h.checked) {
-                        log('Disabling HTTPS checkbox');
-                        h.click();
-                        if (h.checked) {
-                            h.checked = false;
-                            h.dispatchEvent(new Event('change', { bubbles: true }));
-                            h.dispatchEvent(new Event('click',  { bubbles: true }));
-                        }
-                        log('HTTPS checkbox forced off (checked=' + h.checked + ')');
+                        clickEl(https, 'HTTPS checkbox (on)');
                     }
-                    await sleep(300);
 
                     log('Clicking "Test tilkobling til AK-SM850"');
-                    const ipFormBtn = await waitFor('input#ipForm');
-                    enableButton(ipFormBtn);
-                    clickEl(ipFormBtn, 'Test tilkobling til AK-SM850 (' + label + ')');
-                    log('Waiting for test result (up to 30s)...');
+                    {
+                        const ipFormBtn0 = await waitFor('input#ipForm');
+                        enableButton(ipFormBtn0);
+                        clickEl(ipFormBtn0, 'Test tilkobling til AK-SM850');
+                    }
+                    await sleep(2500);
 
-                    // Poll for result — #remoteIpOk visible = success, #remoteIp.invalid = fail
-                    const testResult = await new Promise((resolve) => {
-                        const start = Date.now();
-                        const tick = () => {
-                            const okDiv = document.querySelector('#remoteIpOk');
-                            if (okDiv && okDiv.style.display !== 'none') {
-                                return resolve('ok');
+                    // If Save button isn't there, HTTPS probably failed the test.
+                    // Force HTTPS off, re-click Test tilkobling (up to 5 retries), look again.
+                    let saveBtn = document.querySelector('button#ipSave');
+                    if (!saveBtn) {
+                        log('Save button not visible — HTTPS test likely failed, disabling HTTPS');
+                        const h = await waitFor('input#httpsForm');
+                        if (h.checked) {
+                            h.click();
+                            if (h.checked) {
+                                h.checked = false;
+                                h.dispatchEvent(new Event('change', { bubbles: true }));
+                                h.dispatchEvent(new Event('click',  { bubbles: true }));
                             }
-                            const remoteInput = document.querySelector('#remoteIp');
-                            if (remoteInput && remoteInput.classList.contains('invalid')) {
-                                return resolve('invalid');
-                            }
-                            if (Date.now() - start > 30000) return resolve('timeout');
-                            setTimeout(tick, 500);
-                        };
-                        tick();
-                    });
-                    log('Test result: ' + testResult);
-
-                    if (testResult === 'ok') {
-                        log('AK-SM 850 funnet! — waiting for Save button...');
-                        const saveBtn = await waitFor('button#ipSave', { timeout: 15000 });
-
-                        // Re-set IPs right before Save — test may have reset the input values
-                        // Use every method: native .value, setInput events, AND jQuery .val()
-                        const localBefore = document.querySelector('input#localIp');
-                        const remoteBefore = document.querySelector('input#remoteIp');
-                        const jqSet = window.jQuery || window.$;
-                        if (localBefore) {
-                            log('localIp before save: ' + localBefore.value);
-                            setInput(localBefore, LOCAL_IP);
-                            localBefore.value = LOCAL_IP;
-                            localBefore.setAttribute('value', LOCAL_IP);
-                            if (jqSet) jqSet(localBefore).val(LOCAL_IP).trigger('change');
-                            log('Set localIp = ' + LOCAL_IP);
+                            log('HTTPS checkbox forced off (checked=' + h.checked + ')');
                         }
-                        if (remoteBefore) {
-                            log('remoteIp before save: ' + remoteBefore.value);
-                            setInput(remoteBefore, REMOTE_IP);
-                            remoteBefore.value = REMOTE_IP;
-                            remoteBefore.setAttribute('value', REMOTE_IP);
-                            if (jqSet) jqSet(remoteBefore).val(REMOTE_IP).trigger('change');
-                            log('Set remoteIp = ' + REMOTE_IP);
-                        }
-                        await sleep(500);
-                        // Verify values stuck
-                        log('IPs before save — localIp: ' + (localBefore ? localBefore.value : '?') +
-                            ', remoteIp: ' + (remoteBefore ? remoteBefore.value : '?'));
-
-                        // Clear old message so we don't match stale text
-                        const msgEl = document.querySelector('#message');
-                        if (msgEl) { msgEl.textContent = ''; msgEl.classList.add('hidden'); }
-                        // Use jQuery click only — same as manual click. clickEl fires too many events.
-                        log('Clicking Save (via jQuery)');
-                        try {
-                            const jq = window.jQuery || window.$;
-                            if (jq && typeof jq === 'function') {
-                                jq(saveBtn).trigger('click');
-                                log('Click → Lagre ip-adresser i scanner database (jQuery)');
-                            } else {
-                                saveBtn.click();
-                                log('Click → Lagre ip-adresser i scanner database (native)');
-                            }
-                        } catch (e) {
-                            saveBtn.click();
-                            log('Click → Lagre ip-adresser i scanner database (fallback)');
-                        }
-                        log('Waiting for "IPer oppdatert"...');
-                        await new Promise((resolve, reject) => {
-                            const start = Date.now();
-                            const tick = () => {
-                                const el = document.querySelector('#message');
-                                if (el && !el.classList.contains('hidden') && el.textContent.includes('IPer oppdatert')) {
-                                    return resolve();
-                                }
-                                if (Date.now() - start > 30000) return reject(new Error('timeout'));
-                                setTimeout(tick, 200);
-                            };
-                            tick();
-                        });
-                        log('IPer oppdatert — verifying IP in config...');
-
-                        // Check if remoteIp appears in the AK-SM850 config URL
-                        const checkIp = () => {
-                            const contentEl = document.querySelector('#content');
-                            if (!contentEl) return false;
-                            const emTags = contentEl.querySelectorAll('em');
-                            for (const em of emTags) {
-                                if (em.textContent.includes(REMOTE_IP)) return em.textContent;
-                            }
-                            return false;
-                        };
-
-                        // Wait for IP to appear, then wait 5s and check again to make sure it sticks
-                        log('Waiting for ' + REMOTE_IP + ' in config (up to 30s)...');
-                        const firstCheck = await new Promise((resolve) => {
-                            const start = Date.now();
-                            const tick = () => {
-                                const result = checkIp();
-                                if (result) return resolve(result);
-                                if (Date.now() - start > 30000) return resolve(false);
-                                setTimeout(tick, 500);
-                            };
-                            tick();
-                        });
-
-                        if (firstCheck) {
-                            log('First check OK: ' + firstCheck);
-                            log('Waiting 5s to make sure config sticks...');
-                            await sleep(5000);
-
-                            // Re-click tab to get fresh content
-                            await clickTab('ipconfig');
-                            await sleep(2000);
-
-                            const secondCheck = checkIp();
-                            if (secondCheck) {
-                                log('Second check OK: ' + secondCheck + ' — IP confirmed stable');
-                                log('IP config done — continuing to scan');
-                                setState({ plantId, step: 'scan' });
-                            } else {
-                                log('WARNING: IP reverted to http:///html/xml.cgi — retrying');
-                                if (attempt < 4) {
-                                    setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
-                                } else {
-                                    log('Max attempts — continuing to scan anyway');
-                                    setState({ plantId, step: 'scan' });
-                                }
-                            }
-                        } else {
-                            log('WARNING: ' + REMOTE_IP + ' not found in config after 30s');
-                            if (attempt < 4) {
-                                log('Retrying ipconfig...');
-                                setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
-                            } else {
-                                log('Max attempts — continuing to scan anyway');
-                                setState({ plantId, step: 'scan' });
-                            }
-                        }
-                    } else {
-                        // Test failed — retry with different HTTPS or fall back to manual
-                        if (attempt >= 4) {
-                            log('All 4 attempts failed — waiting for manual fix');
-                            let banner = document.getElementById('ak3-manual-banner');
-                            if (!banner) {
-                                banner = document.createElement('div');
-                                banner.id = 'ak3-manual-banner';
-                                Object.assign(banner.style, {
-                                    position: 'fixed', top: '10px', left: '50%',
-                                    transform: 'translateX(-50%)', zIndex: 999999,
-                                    background: '#f59e0b', color: '#000',
-                                    padding: '10px 16px', borderRadius: '6px',
-                                    fontWeight: '700', boxShadow: '0 2px 8px rgba(0,0,0,.3)'
-                                });
-                                banner.textContent = 'AK3: Check IPs and click Test then Lagre. Waiting for "IPer oppdatert"...';
-                                document.body.appendChild(banner);
-                            }
-                            await waitForText('#message', 'IPer oppdatert', { timeout: 24 * 3600 * 1000 });
-                            banner.remove();
-                            const cont = confirm('IPer oppdatert ✓\n\nContinue Auto Scan?');
-                            if (!cont) { clearState(); return; }
-                            setState({ plantId, step: 'scan' });
-                        } else {
-                            log('Test failed on attempt ' + attempt + ' — retrying with HTTPS ' + (httpsOn ? 'OFF' : 'ON'));
-                            setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
+                        for (let attempt = 1; attempt <= 5 && !saveBtn; attempt++) {
+                            // Re-query every attempt in case the form re-rendered.
+                            const ipFormBtn = await waitFor('input#ipForm');
+                            enableButton(ipFormBtn);
+                            if (ipFormBtn.disabled) log('ipForm still reports disabled after enable');
+                            clickEl(ipFormBtn,
+                                    'Test tilkobling til AK-SM850 (retry ' + attempt + ', HTTPS off)');
+                            // Fallback: also submit the parent form directly.
+                            try {
+                                const form = ipFormBtn.closest('form');
+                                if (form && typeof form.requestSubmit === 'function') form.requestSubmit(ipFormBtn);
+                                else if (form) form.submit();
+                            } catch (e) { log('form submit fallback failed: ' + e.message); }
+                            // Longer wait after HTTPS-off retries — the test can be slower.
+                            const waitMs = attempt === 1 ? 6000 : attempt === 2 ? 8000 : 10000;
+                            log('Waiting ' + waitMs + 'ms for test result');
+                            await sleep(waitMs);
+                            saveBtn = document.querySelector('button#ipSave');
+                            if (!saveBtn) log('Still no Save button after retry ' + attempt);
                         }
                     }
+                    if (!saveBtn) {
+                        try { saveBtn = await waitFor('button#ipSave', { timeout: 5000 }); }
+                        catch { fail('Save button (ipSave) did not appear after test'); }
+                    }
+                    clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
+
+                    let ok = false;
+                    try {
+                        log('Waiting for "IPer oppdatert" confirmation');
+                        await waitForText('#message', 'IPer oppdatert', { timeout: 15000 });
+                        log('IP addresses confirmed updated');
+                        ok = true;
+                    } catch {}
+
+                    if (!ok) {
+                        log('First save did not confirm — retrying with HTTPS off');
+                        const https2 = await waitFor('input#httpsForm');
+                        if (https2.checked) clickEl(https2, 'HTTPS checkbox (off)');
+                        await sleep(500);
+                        {
+                            const b = await waitFor('input#ipForm');
+                            enableButton(b);
+                            clickEl(b, 'Test tilkobling til AK-SM850 (retry)');
+                        }
+                        await sleep(2500);
+                        const saveBtn2 = await waitFor('button#ipSave', { timeout: 10000 });
+                        clickEl(saveBtn2, 'Lagre ip-adresser (retry)');
+                        try {
+                            await waitForText('#message', 'IPer oppdatert', { timeout: 15000 });
+                            log('IP addresses confirmed updated (retry)');
+                            ok = true;
+                        } catch {}
+                    }
+                    if (!ok) {
+                        log('Automatic IP setup failed — waiting for user to fix manually');
+                        // Show a non-blocking banner so the user knows what to do.
+                        let banner = document.getElementById('ak3-manual-banner');
+                        if (!banner) {
+                            banner = document.createElement('div');
+                            banner.id = 'ak3-manual-banner';
+                            Object.assign(banner.style, {
+                                position: 'fixed', top: '10px', left: '50%',
+                                transform: 'translateX(-50%)', zIndex: 999999,
+                                background: '#f59e0b', color: '#000',
+                                padding: '10px 16px', borderRadius: '6px',
+                                fontWeight: '700', boxShadow: '0 2px 8px rgba(0,0,0,.3)'
+                            });
+                            banner.textContent = 'AK3: Set the correct IP addresses manually and click Test tilkobling til AK-SM850 then Lagre ip-adresser i scanner database. Auto Scan is waiting for "IPer oppdatert"...';
+                            document.body.appendChild(banner);
+                        }
+                        // Wait indefinitely for the success message to appear.
+                        await waitForText('#message', 'IPer oppdatert', { timeout: 24 * 3600 * 1000 });
+                        banner.remove();
+                        const cont = confirm('IPer oppdatert ✓\n\nContinue Auto Scan?');
+                        if (!cont) {
+                            clearState();
+                            return;
+                        }
+                        ok = true;
+                        // Refresh state timestamp so auto-resume stays valid.
+                        setState({ plantId, step: 'ipconfig' });
+                    }
+                    setState({ plantId, step: 'scan' });
                     await sleep(500);
                 }
                 else if (state.step === 'ipconfig_wait') {
-                    // Page reload recovery — test button caused a reload
-                    // Just retry from ipconfig with same attempt number
-                    const attempt = state.ipAttempt || 1;
-                    log('Page reloaded during IP test — resuming at attempt ' + attempt);
-                    setState({ plantId, step: 'ipconfig', ipAttempt: attempt - 1 });
+                    log('Page reloaded during IP config — resuming');
+                    setState({ plantId, step: 'ipconfig' });
                 }
                 else if (state.step === 'scan') {
                     log('Opening Scan tab');
