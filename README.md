@@ -1,10 +1,22 @@
-# AK3-Autoscan — AI Reference
+# AK3-Autoscan
 
-> Compact context file for Claude / AI assistants. Read this instead of the full script to save tokens.
+## Install
+
+> Requires [Tampermonkey](https://www.tampermonkey.net/) browser extension.
+
+### [Click here to install AK3 Auto Scan](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/AK3-Autoscan.user.js)
+
+The script auto-updates — when a new version is pushed here, Tampermonkey will update it automatically.
+
+---
+
+## AI Reference
+
+> Compact context for Claude / AI assistants. Read this instead of the full script to save tokens.
 
 ## What it is
 
-A Tampermonkey userscript (`AK3-Autoscan.user.js`, v5.0) that automates the AK3 scanner setup workflow on `*.plants.iwmac.local:8080/secure/ak3_setup/*`.
+A Tampermonkey userscript (`AK3-Autoscan.user.js`, v5.2) that automates the AK3 scanner setup workflow on `*.plants.iwmac.local:8080/secure/ak3_setup/*`.
 
 ## Key constants
 
