@@ -36,6 +36,8 @@ https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/<folder>/<sc
 
 **IMPORTANT:** You MUST bump `@version` every time you push changes, otherwise users won't get the update.
 
+**CRITICAL:** ALWAYS bump the `@version` number with EVERY change, no exceptions. This is a BLOCKING requirement before committing.
+
 ## How to make changes
 
 **IMPORTANT:** After EVERY change, you MUST commit and push to GitHub. Users receive updates via Tampermonkey auto-update, so changes only take effect once pushed.
