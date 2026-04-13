@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      6.2
+// @version      6.3
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -459,6 +459,20 @@
                                 };
                                 tick();
                             });
+                            log('IPer oppdatert — verifying config...');
+                            await sleep(1000);
+                            // Verify AK-SM850 config shows the correct remote IP
+                            const configText = document.querySelector('#content') ? document.querySelector('#content').textContent : '';
+                            const hasCorrectIp = configText.includes(REMOTE_IP);
+                            log('AK-SM850 config contains ' + REMOTE_IP + ': ' + hasCorrectIp);
+                            if (!hasCorrectIp) {
+                                log('WARNING: Config IP does not match — retrying');
+                                if (attempt < 4) {
+                                    setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
+                                    await sleep(500);
+                                    continue;
+                                }
+                            }
                             log('IP addresses confirmed updated');
                             setState({ plantId, step: 'scan' });
                         } catch {
