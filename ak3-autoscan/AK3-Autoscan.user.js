@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      6.9
+// @version      7.0
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -440,8 +440,21 @@
                         // Clear old message so we don't match stale text
                         const msgEl = document.querySelector('#message');
                         if (msgEl) { msgEl.textContent = ''; msgEl.classList.add('hidden'); }
-                        log('Clicking Save');
-                        clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
+                        // Use jQuery click only — same as manual click. clickEl fires too many events.
+                        log('Clicking Save (via jQuery)');
+                        try {
+                            const jq = window.jQuery || window.$;
+                            if (jq && typeof jq === 'function') {
+                                jq(saveBtn).trigger('click');
+                                log('Click → Lagre ip-adresser i scanner database (jQuery)');
+                            } else {
+                                saveBtn.click();
+                                log('Click → Lagre ip-adresser i scanner database (native)');
+                            }
+                        } catch (e) {
+                            saveBtn.click();
+                            log('Click → Lagre ip-adresser i scanner database (fallback)');
+                        }
                         log('Waiting for "IPer oppdatert"...');
                         await new Promise((resolve, reject) => {
                             const start = Date.now();
