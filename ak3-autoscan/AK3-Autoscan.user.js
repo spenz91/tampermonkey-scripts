@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      5.8
+// @version      5.9
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -369,13 +369,14 @@
                     const httpsOn = (attempt % 2 === 1); // odd = HTTPS on, even = HTTPS off
                     const label = 'attempt ' + attempt + ' (HTTPS ' + (httpsOn ? 'ON' : 'OFF') + ')';
 
-                    // FIRST: save state to ipconfig_wait BEFORE doing anything
-                    // This way if the test button causes a page reload, we resume at ipconfig_wait
+                    // Save state BEFORE doing anything so page reload resumes at ipconfig_wait
                     setState({ plantId, step: 'ipconfig_wait', ipAttempt: attempt });
                     log('--- IP Config ' + label + ' ---');
 
                     log('Opening IP Config tab');
                     await clickTab('ipconfig');
+
+                    // Set IP addresses first
                     const local  = await waitFor('input#localIp');
                     const remote = await waitFor('input#remoteIp');
                     log('Setting localIp = ' + LOCAL_IP);
@@ -383,6 +384,7 @@
                     log('Setting remoteIp = ' + REMOTE_IP);
                     setInput(remote, REMOTE_IP);
 
+                    // Then toggle HTTPS
                     const h = await waitFor('input#httpsForm');
                     log('HTTPS checkbox found — checked: ' + h.checked);
                     if (httpsOn && !h.checked) {
@@ -404,11 +406,9 @@
                     const ipFormBtn = await waitFor('input#ipForm');
                     enableButton(ipFormBtn);
                     clickEl(ipFormBtn, 'Test tilkobling til AK-SM850 (' + label + ')');
-                    // Do NOT submit the form directly — it causes immediate navigation
-                    // before GM_setValue can persist. Let the click handler do its thing.
                     log('Waiting for test result (up to 30s)...');
-                    // Poll for result instead of fixed sleep — check if #remoteIpOk becomes visible
-                    // or if #remoteIp gets class "invalid"
+
+                    // Poll for result — #remoteIpOk visible = success, #remoteIp.invalid = fail
                     const testResult = await new Promise((resolve) => {
                         const start = Date.now();
                         const tick = () => {
@@ -426,20 +426,29 @@
                         tick();
                     });
                     log('Test result: ' + testResult);
-                }
-                else if (state.step === 'ipconfig_wait') {
-                    log('Checking test result on IP Config...');
-                    await clickTab('ipconfig');
-                    await sleep(2000);
 
-                    // Check if the test succeeded: #remoteIpOk visible means save button is usable
-                    // #remoteIp.invalid or #remoteIpOk hidden means test failed
-                    const okDiv = document.querySelector('#remoteIpOk');
-                    const isVisible = okDiv && okDiv.style.display !== 'none';
-                    log('#remoteIpOk visible: ' + isVisible);
-
-                    if (!isVisible) {
-                        const attempt = state.ipAttempt || 1;
+                    if (testResult === 'ok') {
+                        // Test succeeded — save immediately without re-clicking the tab
+                        log('AK-SM 850 funnet! — clicking Save');
+                        const saveBtn = document.querySelector('button#ipSave');
+                        clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
+                        log('Waiting for "IPer oppdatert" confirmation (up to 30s)...');
+                        try {
+                            await waitForText('#message', 'IPer oppdatert', { timeout: 30000 });
+                            log('IP addresses confirmed updated');
+                            setState({ plantId, step: 'scan' });
+                        } catch {
+                            log('"IPer oppdatert" not received — retrying');
+                            if (attempt >= 4) {
+                                log('All attempts exhausted — waiting for manual fix');
+                                await waitForText('#message', 'IPer oppdatert', { timeout: 24 * 3600 * 1000 });
+                                setState({ plantId, step: 'scan' });
+                            } else {
+                                setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
+                            }
+                        }
+                    } else {
+                        // Test failed — retry with different HTTPS or fall back to manual
                         if (attempt >= 4) {
                             log('All 4 attempts failed — waiting for manual fix');
                             let banner = document.getElementById('ak3-manual-banner');
@@ -453,7 +462,7 @@
                                     padding: '10px 16px', borderRadius: '6px',
                                     fontWeight: '700', boxShadow: '0 2px 8px rgba(0,0,0,.3)'
                                 });
-                                banner.textContent = 'AK3: Set the correct IP addresses manually and click Test then Lagre. Auto Scan is waiting for "IPer oppdatert"...';
+                                banner.textContent = 'AK3: Check IPs and click Test then Lagre. Waiting for "IPer oppdatert"...';
                                 document.body.appendChild(banner);
                             }
                             await waitForText('#message', 'IPer oppdatert', { timeout: 24 * 3600 * 1000 });
@@ -462,31 +471,18 @@
                             if (!cont) { clearState(); return; }
                             setState({ plantId, step: 'scan' });
                         } else {
-                            log('Test failed on attempt ' + attempt + ' — retrying with different HTTPS');
+                            log('Test failed on attempt ' + attempt + ' — retrying with HTTPS ' + (httpsOn ? 'OFF' : 'ON'));
                             setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
-                        }
-                    } else {
-                        log('AK-SM 850 funnet! — clicking Save');
-                        const saveBtn = document.querySelector('button#ipSave');
-                        clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
-                        log('Waiting for "IPer oppdatert" confirmation (up to 30s)...');
-                        try {
-                            await waitForText('#message', 'IPer oppdatert', { timeout: 30000 });
-                            log('IP addresses confirmed updated');
-                            setState({ plantId, step: 'scan' });
-                        } catch {
-                            const attempt = state.ipAttempt || 1;
-                            log('"IPer oppdatert" not received after 30s — save failed (attempt ' + attempt + ')');
-                            if (attempt >= 4) {
-                                log('All attempts exhausted — waiting for manual fix');
-                                await waitForText('#message', 'IPer oppdatert', { timeout: 24 * 3600 * 1000 });
-                                setState({ plantId, step: 'scan' });
-                            } else {
-                                setState({ plantId, step: 'ipconfig', ipAttempt: attempt });
-                            }
                         }
                     }
                     await sleep(500);
+                }
+                else if (state.step === 'ipconfig_wait') {
+                    // Page reload recovery — test button caused a reload
+                    // Just retry from ipconfig with same attempt number
+                    const attempt = state.ipAttempt || 1;
+                    log('Page reloaded during IP test — resuming at attempt ' + attempt);
+                    setState({ plantId, step: 'ipconfig', ipAttempt: attempt - 1 });
                 }
                 else if (state.step === 'scan') {
                     log('Opening Scan tab');
