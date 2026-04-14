@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.5
+// @version      7.6
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -64,39 +64,29 @@
     }
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    // Sleep with a visible countdown in the debug panel (ticks every ~1s).
+    // Sleep that logs the total elapsed time once it finishes (no live ticker).
     function sleepLogged(ms, label) {
         return new Promise((resolve) => {
-            const totalSec = Math.ceil(ms / 1000);
             const start = Date.now();
-            let lastLogged = -1;
-            const tick = () => {
-                const elapsed = Math.floor((Date.now() - start) / 1000);
-                if (elapsed >= ms / 1000) return resolve();
-                if (elapsed !== lastLogged) {
-                    lastLogged = elapsed;
-                    log('  ...' + (label || 'waiting') + ': ' + elapsed + 's / ' + totalSec + 's');
-                }
-                setTimeout(tick, 250);
-            };
-            tick();
+            setTimeout(() => {
+                const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+                log((label || 'waited') + ' — done in ' + elapsed + 's');
+                resolve();
+            }, ms);
         });
     }
 
-    // waitForText with a visible elapsed-time counter in the debug panel.
+    // waitForText that logs only the total elapsed time once the text appears.
     function waitForTextLogged(selector, text, opts, label) {
         const timeout = (opts && opts.timeout) || 30000;
-        const totalSec = Math.ceil(timeout / 1000);
         return new Promise((resolve, reject) => {
             const start = Date.now();
-            let lastLogged = -1;
             const tick = () => {
                 const el = document.querySelector(selector);
-                if (el && el.textContent.includes(text)) return resolve(el);
-                const elapsed = Math.floor((Date.now() - start) / 1000);
-                if (elapsed !== lastLogged && elapsed > 0) {
-                    lastLogged = elapsed;
-                    log('  ...' + (label || 'waiting for "' + text + '"') + ': ' + elapsed + 's / ' + totalSec + 's');
+                if (el && el.textContent.includes(text)) {
+                    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+                    log((label || ('waited for "' + text + '"')) + ' — done in ' + elapsed + 's');
+                    return resolve(el);
                 }
                 if (Date.now() - start > timeout) return reject(new Error('timeout text: ' + text));
                 setTimeout(tick, 500);
