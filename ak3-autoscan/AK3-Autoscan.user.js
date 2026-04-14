@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.4
+// @version      7.5
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -63,6 +63,47 @@
         renderDebugPanel();
     }
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    // Sleep with a visible countdown in the debug panel (ticks every ~1s).
+    function sleepLogged(ms, label) {
+        return new Promise((resolve) => {
+            const totalSec = Math.ceil(ms / 1000);
+            const start = Date.now();
+            let lastLogged = -1;
+            const tick = () => {
+                const elapsed = Math.floor((Date.now() - start) / 1000);
+                if (elapsed >= ms / 1000) return resolve();
+                if (elapsed !== lastLogged) {
+                    lastLogged = elapsed;
+                    log('  ...' + (label || 'waiting') + ': ' + elapsed + 's / ' + totalSec + 's');
+                }
+                setTimeout(tick, 250);
+            };
+            tick();
+        });
+    }
+
+    // waitForText with a visible elapsed-time counter in the debug panel.
+    function waitForTextLogged(selector, text, opts, label) {
+        const timeout = (opts && opts.timeout) || 30000;
+        const totalSec = Math.ceil(timeout / 1000);
+        return new Promise((resolve, reject) => {
+            const start = Date.now();
+            let lastLogged = -1;
+            const tick = () => {
+                const el = document.querySelector(selector);
+                if (el && el.textContent.includes(text)) return resolve(el);
+                const elapsed = Math.floor((Date.now() - start) / 1000);
+                if (elapsed !== lastLogged && elapsed > 0) {
+                    lastLogged = elapsed;
+                    log('  ...' + (label || 'waiting for "' + text + '"') + ': ' + elapsed + 's / ' + totalSec + 's');
+                }
+                if (Date.now() - start > timeout) return reject(new Error('timeout text: ' + text));
+                setTimeout(tick, 500);
+            };
+            tick();
+        });
+    }
 
     function describe(el) {
         if (!el) return '<null>';
@@ -387,7 +428,7 @@
                         enableButton(ipFormBtn0);
                         clickEl(ipFormBtn0, 'Test tilkobling til AK-SM850');
                     }
-                    await sleep(2500);
+                    await sleepLogged(2500, 'waiting for test result');
 
                     // If Save button isn't there, HTTPS probably failed the test.
                     // Force HTTPS off, re-click Test tilkobling (up to 5 retries), look again.
@@ -419,8 +460,7 @@
                             } catch (e) { log('form submit fallback failed: ' + e.message); }
                             // Longer wait after HTTPS-off retries — the test can be slower.
                             const waitMs = attempt === 1 ? 6000 : attempt === 2 ? 8000 : 10000;
-                            log('Waiting ' + waitMs + 'ms for test result');
-                            await sleep(waitMs);
+                            await sleepLogged(waitMs, 'waiting for test result (retry ' + attempt + ')');
                             saveBtn = document.querySelector('button#ipSave');
                             if (!saveBtn) log('Still no Save button after retry ' + attempt);
                         }
@@ -434,7 +474,8 @@
                     let ok = false;
                     try {
                         log('Waiting for "IPer oppdatert" confirmation');
-                        await waitForText('#message', 'IPer oppdatert', { timeout: 15000 });
+                        await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 15000 },
+                            'waiting for IPer oppdatert');
                         log('IP addresses confirmed updated');
                         ok = true;
                     } catch {}
@@ -449,11 +490,12 @@
                             enableButton(b);
                             clickEl(b, 'Test tilkobling til AK-SM850 (retry)');
                         }
-                        await sleep(2500);
+                        await sleepLogged(2500, 'waiting for test result (retry)');
                         const saveBtn2 = await waitFor('button#ipSave', { timeout: 10000 });
                         clickEl(saveBtn2, 'Lagre ip-adresser (retry)');
                         try {
-                            await waitForText('#message', 'IPer oppdatert', { timeout: 15000 });
+                            await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 15000 },
+                                'waiting for IPer oppdatert (retry)');
                             log('IP addresses confirmed updated (retry)');
                             ok = true;
                         } catch {}
