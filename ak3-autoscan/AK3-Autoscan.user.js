@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.6
+// @version      7.7
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -40,13 +40,35 @@
 
     const LOCAL_IP  = '192.168.10.10';
     const REMOTE_IP = '192.168.10.20';
-    const STATE_KEY = 'ak3_state';
+
+    // ---------- Per-plant storage scoping ----------
+    // Tampermonkey GM_setValue is shared across ALL tabs running this script.
+    // To allow scanning multiple plants in parallel without cross-talk, we
+    // namespace every persisted key by the plant id from the current tab's host.
+    // Each tab is bound to one plant via its URL, so per-plant keys give natural
+    // per-tab isolation for state, logs, and the panel-closed flag.
+    function getPlantIdFromHost() {
+        const m = location.host.match(/^(\d+)\.plants\.iwmac\.local/);
+        return m ? m[1] : null;
+    }
+    const TAB_PLANT_ID = getPlantIdFromHost();
+    const stateKeyFor       = (pid) => 'ak3_state_'        + (pid || 'unknown');
+    const logKeyFor         = (pid) => 'ak3_log_'          + (pid || 'unknown');
+    const panelClosedKeyFor = (pid) => 'ak3_panel_closed_' + (pid || 'unknown');
+    const STATE_KEY = stateKeyFor(TAB_PLANT_ID);
+    const LOG_KEY   = logKeyFor(TAB_PLANT_ID);
+    const PANEL_CLOSED_KEY = panelClosedKeyFor(TAB_PLANT_ID);
+
+    // One-time cleanup of pre-7.7 global keys so they don't linger in storage.
+    try {
+        if (GM_getValue('ak3_state', null) !== null)         GM_deleteValue('ak3_state');
+        if (GM_getValue('ak3_log', null) !== null)           GM_deleteValue('ak3_log');
+        if (GM_getValue('ak3_panel_closed', null) !== null)  GM_deleteValue('ak3_panel_closed');
+    } catch (e) {}
 
     const getState = () => GM_getValue(STATE_KEY, null);
     const setState = (s) => GM_setValue(STATE_KEY, { ...s, ts: Date.now() });
     const clearState = () => GM_deleteValue(STATE_KEY);
-
-    const LOG_KEY = 'ak3_log';
     function ts() {
         const d = new Date();
         const p = (n) => String(n).padStart(2, '0');
@@ -234,7 +256,7 @@
             e.target.textContent = hidden ? '−' : '+';
         };
         panel.querySelector('#ak3-debug-close').onclick = () => {
-            GM_setValue('ak3_panel_closed', true);
+            GM_setValue(PANEL_CLOSED_KEY, true);
             panel.remove();
         };
         renderDebugPanel();
@@ -275,10 +297,6 @@
         alert('[AK3] STOPPED: ' + msg);
         clearState();
         throw new Error(msg);
-    }
-    function getPlantIdFromHost() {
-        const m = location.host.match(/^(\d+)\.plants\.iwmac\.local/);
-        return m ? m[1] : null;
     }
     function setInput(el, value) {
         const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set;
@@ -324,7 +342,7 @@
             const plantId = getPlantIdFromHost();
             if (!plantId) return alert('No plant id in host');
             GM_setValue(LOG_KEY, []);
-            GM_deleteValue('ak3_panel_closed');
+            GM_deleteValue(PANEL_CLOSED_KEY);
             injectDebugPanel();
             log('Auto Scan started for plant ' + plantId);
             try {
@@ -636,7 +654,7 @@
     // ---------- Router ----------
     // Only show the debug panel when an Auto Scan is in progress AND
     // the user hasn't manually closed it.
-    if (getState() && !GM_getValue('ak3_panel_closed', false)) injectDebugPanel();
+    if (getState() && !GM_getValue(PANEL_CLOSED_KEY, false)) injectDebugPanel();
 
     if (getPlantIdFromHost()) {
         injectMenuButton();

@@ -16,7 +16,7 @@ The script auto-updates — when a new version is pushed here, Tampermonkey will
 
 ## What it is
 
-A Tampermonkey userscript (`AK3-Autoscan.user.js`, v5.2) that automates the AK3 scanner setup workflow on `*.plants.iwmac.local:8080/secure/ak3_setup/*`.
+A Tampermonkey userscript (`AK3-Autoscan.user.js`, v7.7) that automates the AK3 scanner setup workflow on `*.plants.iwmac.local:8080/secure/ak3_setup/*`.
 
 ## Key constants
 
@@ -24,9 +24,14 @@ A Tampermonkey userscript (`AK3-Autoscan.user.js`, v5.2) that automates the AK3 
 |---|---|
 | `LOCAL_IP` | `192.168.10.10` |
 | `REMOTE_IP` | `192.168.10.20` |
-| `STATE_KEY` | `ak3_state` (GM storage) |
-| `LOG_KEY` | `ak3_log` (GM storage, max 300 lines) |
+| `STATE_KEY` | `ak3_state_<plantId>` (GM storage, per-plant) |
+| `LOG_KEY` | `ak3_log_<plantId>` (GM storage, per-plant, max 300 lines) |
+| `PANEL_CLOSED_KEY` | `ak3_panel_closed_<plantId>` (GM storage, per-plant) |
 | `X_CALLER` | `AK3-Autoscan` |
+
+## Multi-plant isolation
+
+GM storage is shared across all tabs running this script. To allow scanning multiple plants in parallel without cross-talk, the workflow state, log buffer, and panel-closed flag are all namespaced by the plant id parsed from the tab's host (`<plantId>.plants.iwmac.local`). Each tab is bound to one plant via its URL, so per-plant keys give per-tab isolation — the debug panel only shows logs for the plant in that tab.
 
 ## Workflow steps (linear state machine)
 
