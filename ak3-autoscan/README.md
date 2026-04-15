@@ -16,7 +16,7 @@ The script auto-updates — when a new version is pushed here, Tampermonkey will
 
 ## What it is
 
-A Tampermonkey userscript (`AK3-Autoscan.user.js`, v7.7) that automates the AK3 scanner setup workflow on `*.plants.iwmac.local:8080/secure/ak3_setup/*`.
+A Tampermonkey userscript (`AK3-Autoscan.user.js`, v7.8) that automates the AK3 scanner setup workflow on `*.plants.iwmac.local:8080/secure/ak3_setup/*`.
 
 ## Key constants
 
@@ -45,7 +45,10 @@ Each step is persisted in GM storage so it survives page reloads.
 
 ### 2. `ipconfig`
 - Opens the **IP Config** tab
-- Sets `localIp` = `192.168.10.10`, `remoteIp` = `192.168.10.20`
+- Reads the "config satt til" hints in the page `<h2>`s:
+  - `Server config satt til <em>…</em>` → `localIp`
+  - `AK-SM850 config satt til <em>…</em>` → `remoteIp` (IP is extracted even if wrapped in a URL)
+- Falls back to defaults (`localIp` = `192.168.10.10`, `remoteIp` = `192.168.10.20`) only if no IP is present in the hint
 - Enables HTTPS checkbox, clicks **"Test tilkobling til AK-SM850"**
 - If test fails (no Save button), disables HTTPS and retries up to 5 times with increasing wait
 - Clicks **"Lagre ip-adresser i scanner database"**, waits for `"IPer oppdatert"`

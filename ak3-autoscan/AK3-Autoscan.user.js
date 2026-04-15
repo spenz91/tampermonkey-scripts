@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.7
+// @version      7.8
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -326,6 +326,23 @@
         clickEl(li, 'Tab: ' + (li.textContent || id).trim());
         await sleep(400);
     }
+
+    // Read an IPv4 out of the "<h2>... config satt til <em>...</em></h2>" hint,
+    // matching by the title prefix ('Server config satt til' or
+    // 'AK-SM850 config satt til'). Handles both bare IPs and IPs embedded in
+    // URLs (e.g. "http://10.230.4.126/html/xml.cgi"). Returns null if absent.
+    function detectConfiguredIp(titlePrefix) {
+        const h2s = document.querySelectorAll('#content h2');
+        for (const h of h2s) {
+            if (!h.textContent.includes(titlePrefix)) continue;
+            const em = h.querySelector('em');
+            const src = (em ? em.textContent : h.textContent) || '';
+            const m = src.match(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/);
+            if (m) return m[1];
+        }
+        return null;
+    }
+
     // ---------- Inject Auto Scan button into side menu ----------
     function injectMenuButton() {
         const menu = document.getElementById('mainmenu');
@@ -417,10 +434,17 @@
                     await clickTab('ipconfig');
                     const local  = await waitFor('input#localIp');
                     const remote = await waitFor('input#remoteIp');
-                    log('Setting localIp = ' + LOCAL_IP);
-                    setInput(local,  LOCAL_IP);
-                    log('Setting remoteIp = ' + REMOTE_IP);
-                    setInput(remote, REMOTE_IP);
+
+                    // Prefer IPs already shown in the page's "config satt til" hints.
+                    // Fall back to hardcoded defaults only when no IP is present.
+                    const detectedLocal  = detectConfiguredIp('Server config satt til');
+                    const detectedRemote = detectConfiguredIp('AK-SM850 config satt til');
+                    const localIpToUse   = detectedLocal  || LOCAL_IP;
+                    const remoteIpToUse  = detectedRemote || REMOTE_IP;
+                    log('localIp '  + (detectedLocal  ? 'detected on page' : 'using default') + ' = ' + localIpToUse);
+                    log('remoteIp ' + (detectedRemote ? 'detected on page' : 'using default') + ' = ' + remoteIpToUse);
+                    setInput(local,  localIpToUse);
+                    setInput(remote, remoteIpToUse);
 
                     log('Waiting for HTTPS checkbox...');
                     const https = await waitFor('input#httpsForm');
