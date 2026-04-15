@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Hide Rocketlane Project Calendar + Floating Chat
+// @name         Rocketlane Enhancer
 // @namespace    http://tampermonkey.net/
 // @version      2.0
 // @description  Hide the timeline/calendar on Rocketlane project plan pages, and add a floating chat panel on the timeline page.

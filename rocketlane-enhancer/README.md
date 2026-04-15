@@ -1,10 +1,10 @@
-# Hide Rocketlane Calendar + Floating Chat
+# Rocketlane Enhancer
 
 ## Install
 
 > Requires [Tampermonkey](https://www.tampermonkey.net/) browser extension.
 
-### [Click here to install Hide Rocketlane Calendar](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/hide-rocketlane-calendar/hide-rocketlane-calendar.user.js)
+### [Click here to install Rocketlane Enhancer](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-enhancer/rocketlane-enhancer.user.js)
 
 The script auto-updates — when a new version is pushed here, Tampermonkey will update it automatically.
 
@@ -16,7 +16,7 @@ The script auto-updates — when a new version is pushed here, Tampermonkey will
 
 ## What it is
 
-A Tampermonkey userscript (`hide-rocketlane-calendar.user.js`, v2.0) that customizes the Rocketlane project management UI at `kiona.rocketlane.com`. It hides the Gantt calendar/timeline and adds a floating chat panel on the timeline page.
+A Tampermonkey userscript (`rocketlane-enhancer.user.js`, v2.0) that customizes the Rocketlane project management UI at `kiona.rocketlane.com`. It hides the Gantt calendar/timeline and adds a floating chat panel on the timeline page.
 
 ## Key constants
 
@@ -96,4 +96,4 @@ Update the IDs if your project uses different conversations. Find IDs in the URL
 
 | File | Purpose |
 |---|---|
-| `hide-rocketlane-calendar.user.js` | Main userscript (install in Tampermonkey) |
+| `rocketlane-enhancer.user.js` | Main userscript (install in Tampermonkey) |
