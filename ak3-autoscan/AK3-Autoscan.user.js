@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.8
+// @version      7.9
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -454,19 +454,29 @@
                         clickEl(https, 'HTTPS checkbox (on)');
                     }
 
-                    log('Clicking "Test tilkobling til AK-SM850"');
+                    log('Clicking "Test tilkobling til AK-SM850" (HTTPS on)');
                     {
                         const ipFormBtn0 = await waitFor('input#ipForm');
                         enableButton(ipFormBtn0);
                         clickEl(ipFormBtn0, 'Test tilkobling til AK-SM850');
                     }
-                    await sleepLogged(2500, 'waiting for test result');
+                    await sleepLogged(2500, 'waiting for HTTPS test result');
 
-                    // If Save button isn't there, HTTPS probably failed the test.
-                    // Force HTTPS off, re-click Test tilkobling (up to 5 retries), look again.
+                    // Double-check: poll for the Save button a few times before deciding HTTPS failed.
                     let saveBtn = document.querySelector('button#ipSave');
                     if (!saveBtn) {
-                        log('Save button not visible — HTTPS test likely failed, disabling HTTPS');
+                        log('Save button not found yet after HTTPS test — double-checking...');
+                        for (let dc = 1; dc <= 3 && !saveBtn; dc++) {
+                            await sleepLogged(2000, 'double-check ' + dc + '/3 for ipSave button (HTTPS)');
+                            saveBtn = document.querySelector('button#ipSave');
+                        }
+                        if (saveBtn) log('Save button appeared on double-check (HTTPS) — proceeding');
+                    }
+
+                    // If Save button still isn't there, HTTPS probably failed the test.
+                    // Force HTTPS off, re-click Test tilkobling (up to 5 retries), look again.
+                    if (!saveBtn) {
+                        log('Save button not visible after double-check — HTTPS test likely failed, disabling HTTPS');
                         const h = await waitFor('input#httpsForm');
                         if (h.checked) {
                             h.click();
@@ -478,35 +488,56 @@
                             log('HTTPS checkbox forced off (checked=' + h.checked + ')');
                         }
                         for (let attempt = 1; attempt <= 5 && !saveBtn; attempt++) {
-                            // Re-query every attempt in case the form re-rendered.
                             const ipFormBtn = await waitFor('input#ipForm');
                             enableButton(ipFormBtn);
                             if (ipFormBtn.disabled) log('ipForm still reports disabled after enable');
                             clickEl(ipFormBtn,
                                     'Test tilkobling til AK-SM850 (retry ' + attempt + ', HTTPS off)');
-                            // Fallback: also submit the parent form directly.
                             try {
                                 const form = ipFormBtn.closest('form');
                                 if (form && typeof form.requestSubmit === 'function') form.requestSubmit(ipFormBtn);
                                 else if (form) form.submit();
                             } catch (e) { log('form submit fallback failed: ' + e.message); }
-                            // Longer wait after HTTPS-off retries — the test can be slower.
                             const waitMs = attempt === 1 ? 6000 : attempt === 2 ? 8000 : 10000;
                             await sleepLogged(waitMs, 'waiting for test result (retry ' + attempt + ')');
                             saveBtn = document.querySelector('button#ipSave');
-                            if (!saveBtn) log('Still no Save button after retry ' + attempt);
+                            if (!saveBtn) {
+                                log('Save button not found after HTTP retry ' + attempt + ' — double-checking...');
+                                for (let dc = 1; dc <= 3 && !saveBtn; dc++) {
+                                    await sleepLogged(2000, 'double-check ' + dc + '/3 for ipSave button (HTTP retry ' + attempt + ')');
+                                    saveBtn = document.querySelector('button#ipSave');
+                                }
+                                if (saveBtn) log('Save button appeared on double-check (HTTP retry ' + attempt + ')');
+                                else log('Still no Save button after double-check (HTTP retry ' + attempt + ')');
+                            }
                         }
                     }
                     if (!saveBtn) {
                         try { saveBtn = await waitFor('button#ipSave', { timeout: 5000 }); }
                         catch { fail('Save button (ipSave) did not appear after test'); }
                     }
+                    // Re-query to get a fresh DOM reference right before clicking.
+                    saveBtn = document.querySelector('button#ipSave') || saveBtn;
+                    log('Save button confirmed present — enabling and clicking');
+                    enableButton(saveBtn);
+                    saveBtn.scrollIntoView({ behavior: 'instant', block: 'center' });
+                    await sleep(300);
                     clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
+                    // Fallback: also trigger via jQuery and form submit in case click didn't register.
+                    try {
+                        const jq = window.jQuery || window.$;
+                        if (jq && typeof jq === 'function') jq('#ipSave').trigger('click');
+                    } catch (e) {}
+                    try {
+                        const form = saveBtn.closest('form');
+                        if (form && typeof form.requestSubmit === 'function') form.requestSubmit(saveBtn);
+                        else if (form) form.submit();
+                    } catch (e) { log('ipSave form submit fallback: ' + e.message); }
 
                     let ok = false;
                     try {
                         log('Waiting for "IPer oppdatert" confirmation');
-                        await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 15000 },
+                        await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 30000 },
                             'waiting for IPer oppdatert');
                         log('IP addresses confirmed updated');
                         ok = true;
@@ -523,10 +554,32 @@
                             clickEl(b, 'Test tilkobling til AK-SM850 (retry)');
                         }
                         await sleepLogged(2500, 'waiting for test result (retry)');
-                        const saveBtn2 = await waitFor('button#ipSave', { timeout: 10000 });
+                        let saveBtn2 = document.querySelector('button#ipSave');
+                        if (!saveBtn2) {
+                            log('Save button not found after retry test — double-checking...');
+                            for (let dc = 1; dc <= 3 && !saveBtn2; dc++) {
+                                await sleepLogged(2000, 'double-check ' + dc + '/3 for ipSave button (save retry)');
+                                saveBtn2 = document.querySelector('button#ipSave');
+                            }
+                            if (!saveBtn2) saveBtn2 = await waitFor('button#ipSave', { timeout: 10000 });
+                        }
+                        saveBtn2 = document.querySelector('button#ipSave') || saveBtn2;
+                        log('Save button confirmed present (retry) — enabling and clicking');
+                        enableButton(saveBtn2);
+                        saveBtn2.scrollIntoView({ behavior: 'instant', block: 'center' });
+                        await sleep(300);
                         clickEl(saveBtn2, 'Lagre ip-adresser (retry)');
                         try {
-                            await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 15000 },
+                            const jq = window.jQuery || window.$;
+                            if (jq && typeof jq === 'function') jq('#ipSave').trigger('click');
+                        } catch (e) {}
+                        try {
+                            const form = saveBtn2.closest('form');
+                            if (form && typeof form.requestSubmit === 'function') form.requestSubmit(saveBtn2);
+                            else if (form) form.submit();
+                        } catch (e) { log('ipSave form submit fallback (retry): ' + e.message); }
+                        try {
+                            await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 30000 },
                                 'waiting for IPer oppdatert (retry)');
                             log('IP addresses confirmed updated (retry)');
                             ok = true;

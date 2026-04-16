@@ -16,7 +16,7 @@ The script auto-updates — when a new version is pushed here, Tampermonkey will
 
 ## What it is
 
-A Tampermonkey userscript (`AK3-Autoscan.user.js`, v7.8) that automates the AK3 scanner setup workflow on `*.plants.iwmac.local:8080/secure/ak3_setup/*`.
+A Tampermonkey userscript (`AK3-Autoscan.user.js`, v7.9) that automates the AK3 scanner setup workflow on `*.plants.iwmac.local:8080/secure/ak3_setup/*`.
 
 ## Key constants
 
