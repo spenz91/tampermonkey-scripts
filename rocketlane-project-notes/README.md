@@ -16,7 +16,7 @@ The script auto-updates — when a new version is pushed here, Tampermonkey will
 
 ## What it is
 
-A Tampermonkey userscript (`rocketlane-project-notes.user.js`, v1.9.0) that adds a writable **Note** column to the Rocketlane Projects list (AG Grid). Notes persist to the Toolbox SQL API (`team_status.iw_project_notes`) with a local Tampermonkey storage fallback. The header shows live SQL save status (saving / saved / error) and exposes a `/health` connection test.
+A Tampermonkey userscript (`rocketlane-project-notes.user.js`, v1.10.0) that adds a writable **Note** column to the Rocketlane Projects list (AG Grid). Notes persist to the Toolbox SQL API (`team_status.iw_project_notes`) with a local Tampermonkey storage fallback. The header shows live SQL save status (saving / saved / error) and exposes a `/health` connection test.
 
 ## Key constants
 
@@ -36,9 +36,12 @@ A Tampermonkey userscript (`rocketlane-project-notes.user.js`, v1.9.0) that adds
 ### Feature 1: Note column in the Projects grid
 
 - Injects a new `Note` cell after the project name in every AG Grid row on the Projects list page.
-- Empty cells show `Add note…` placeholder. Click a cell to edit inline.
+- Empty cells show `Add note…` placeholder.
 - Header is labelled `Note` and is user-resizable via a drag handle (saved to GM storage).
 - URLs in the note are rendered as blue `<a target="_blank">` links in the display cell (click to open in a new tab).
+- Each cell exposes two hover action buttons (28×28 px) so clicking inside the cell never accidentally triggers edit mode:
+  - `✎` **Edit** — starts the inline editor (contenteditable) in the cell.
+  - `⤢` **Expand** — opens the popover editor.
 - No-op save: `setNote` skips the SQL round-trip when the trimmed value is unchanged.
 
 ### Feature 2: Expand popover (rich editor)

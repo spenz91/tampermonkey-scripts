@@ -4,7 +4,7 @@
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
 // @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-project-notes/rocketlane-project-notes.user.js
 // @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-project-notes/rocketlane-project-notes.user.js
-// @version      1.9.0
+// @version      1.10.0
 // @description  Adds a writable "Note" column before Status on the Rocketlane Projects list. Persists to toolbox SQL with local fallback, SQL save status on the header, /health test, and a rich editor with inline clickable URLs while you write.
 // @author       Thomas
 // @match        https://*.rocketlane.com/*
@@ -437,15 +437,13 @@
         font: inherit;
         color: inherit;
         border-right: 1px solid var(--table-border-color, #e0e0e0);
-        cursor: text;
+        cursor: default;
         overflow: hidden;
         z-index: 2;
         background: inherit;
       }
       .tm-pn-cell:hover {
-        background: rgba(15, 98, 254, 0.06);
-        outline: 1px dashed rgba(15, 98, 254, 0.45);
-        outline-offset: -2px;
+        background: rgba(15, 98, 254, 0.04);
       }
       .tm-pn-text {
         flex: 1;
@@ -500,29 +498,36 @@
       .tm-pn-editor a:hover {
         color: #0043ce;
       }
-      .tm-pn-expand {
+      .tm-pn-btn {
         flex: 0 0 auto;
         margin-left: 6px;
-        width: 18px;
-        height: 18px;
+        width: 28px;
+        height: 28px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border-radius: 3px;
+        border-radius: 4px;
+        border: 1px solid transparent;
         color: #525252;
+        background: rgba(255, 255, 255, 0.6);
         cursor: pointer;
         opacity: 0;
-        transition: opacity 0.1s ease;
-        font-size: 14px;
+        transition: opacity 0.1s ease, background 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+        font-size: 16px;
         line-height: 1;
         user-select: none;
       }
-      .tm-pn-cell:hover .tm-pn-expand {
+      .tm-pn-cell:hover .tm-pn-btn,
+      .tm-pn-btn:focus-visible {
         opacity: 1;
       }
-      .tm-pn-expand:hover {
+      .tm-pn-btn:hover {
         background: rgba(15, 98, 254, 0.12);
+        border-color: rgba(15, 98, 254, 0.3);
         color: #0f62fe;
+      }
+      .tm-pn-btn:active {
+        background: rgba(15, 98, 254, 0.2);
       }
       .tm-pn-popover {
         position: fixed;
@@ -1011,8 +1016,20 @@
     }
     cellEl.appendChild(span);
 
+    const edit = document.createElement("span");
+    edit.className = "tm-pn-btn tm-pn-edit";
+    edit.title = "Edit note";
+    edit.textContent = "✎";
+    edit.addEventListener("mousedown", (e) => e.stopPropagation());
+    edit.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const projectId = cellEl.getAttribute("data-project-id");
+      startEdit(cellEl, projectId);
+    });
+    cellEl.appendChild(edit);
+
     const expand = document.createElement("span");
-    expand.className = "tm-pn-expand";
+    expand.className = "tm-pn-btn tm-pn-expand";
     expand.title = "Expand";
     expand.textContent = "⤢";
     expand.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -1176,11 +1193,6 @@
     cell.style.height = nameCell.style.height || "100%";
 
     renderCellText(cell, getNote(projectId));
-
-    cell.addEventListener("click", (e) => {
-      e.stopPropagation();
-      startEdit(cell, projectId);
-    });
 
     nameCell.parentElement.appendChild(cell);
   }
