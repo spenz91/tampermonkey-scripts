@@ -2,7 +2,7 @@
 // @name         Oneflow Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.3.0
+// @version      1.4.0
 // @description  Adds a sidebar button on Oneflow that copies product description + quantity (antall) from the tilbud PDF as rich HTML (bold headers + bullet list).
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -157,12 +157,15 @@
         return 'Oneflow document info:\n' + body;
     }
 
-    function flashButton(btn, msg, ok) {
-        const orig = btn.textContent;
-        btn.textContent = msg;
+    const COPY_SVG = '<svg fill="none" aria-hidden="true" height="24px" width="24px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="8" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"></rect><path d="M16 8V5.5C16 4.67157 15.3284 4 14.5 4H5.5C4.67157 4 4 4.67157 4 5.5V14.5C4 15.3284 4.67157 16 5.5 16H8" stroke="currentColor" stroke-width="1.5"></path></svg>';
+    const CHECK_SVG = '<svg fill="none" aria-hidden="true" height="24px" width="24px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 12.5L10 17.5L19 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+    const ERROR_SVG = '<svg fill="none" aria-hidden="true" height="24px" width="24px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>';
+
+    function flashButton(btn, ok) {
+        btn.innerHTML = ok ? CHECK_SVG : ERROR_SVG;
         btn.style.color = ok ? '#0a7d3b' : '#c0392b';
         setTimeout(() => {
-            btn.textContent = orig;
+            btn.innerHTML = COPY_SVG;
             btn.style.color = '';
         }, 1500);
     }
@@ -214,36 +217,28 @@
         return ok;
     }
 
-    function buildButton() {
+    function buildButton(referenceTab) {
         const btn = document.createElement('button');
         btn.id = BTN_ID;
         btn.type = 'button';
-        btn.textContent = 'Kopier';
-        btn.title = 'Kopier beskrivelser og antall';
+        btn.title = 'Kopier produkter (beskrivelse + antall)';
         btn.setAttribute('aria-label', 'Kopier produkter');
-        Object.assign(btn.style, {
-            margin: '8px 4px',
-            padding: '6px 4px',
-            fontSize: '11px',
-            fontWeight: '600',
-            lineHeight: '1.2',
-            cursor: 'pointer',
-            border: '1px solid #013a4c',
-            borderRadius: '6px',
-            background: '#ffffff',
-            color: '#013a4c',
-            width: 'calc(100% - 8px)',
-        });
+        // Match the vertical-tab styling so it blends with the existing icons.
+        if (referenceTab && referenceTab.className) {
+            btn.className = referenceTab.className.replace(/_ActiveTabTrigger[^ ]*/g, '').trim();
+        }
+        btn.innerHTML = COPY_SVG;
+        btn.style.cursor = 'pointer';
         btn.addEventListener('click', async () => {
             const items = extractItems();
             if (!items.length) {
-                flashButton(btn, 'Fant ingen', false);
+                flashButton(btn, false);
                 return;
             }
             const html = itemsToHtml(items);
             const plain = itemsToPlain(items);
             const ok = await copyRich(html, plain);
-            flashButton(btn, ok ? 'Kopiert!' : 'Feil', ok);
+            flashButton(btn, ok);
         });
         return btn;
     }
@@ -252,7 +247,8 @@
         if (document.getElementById(BTN_ID)) return;
         const tabs = document.querySelector('[role="tablist"][aria-orientation="vertical"]');
         if (!tabs) return;
-        tabs.appendChild(buildButton());
+        const referenceTab = tabs.querySelector('button[role="tab"]');
+        tabs.appendChild(buildButton(referenceTab));
     }
 
     const obs = new MutationObserver(() => injectButton());
