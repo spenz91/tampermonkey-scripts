@@ -2,7 +2,7 @@
 // @name         Oneflow Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.2.0
+// @version      1.3.0
 // @description  Adds a sidebar button on Oneflow that copies product description + quantity (antall) from the tilbud PDF as rich HTML (bold headers + bullet list).
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -116,7 +116,7 @@
     }
 
     function itemsToHtml(items) {
-        let html = '';
+        let html = '<p><strong>Oneflow document info:</strong></p>';
         let inList = false;
         const openList = () => {
             if (!inList) {
@@ -148,12 +148,13 @@
     }
 
     function itemsToPlain(items) {
-        return items
+        const body = items
             .map(it => {
                 if (it.type === 'header') return it.desc;
                 return '• ' + it.desc + (it.antall ? ' — ' + it.antall : '');
             })
             .join('\n');
+        return 'Oneflow document info:\n' + body;
     }
 
     function flashButton(btn, msg, ok) {
