@@ -2,7 +2,7 @@
 // @name         Oneflow Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.4.0
+// @version      1.4.1
 // @description  Adds a sidebar button on Oneflow that copies product description + quantity (antall) from the tilbud PDF as rich HTML (bold headers + bullet list).
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -221,8 +221,8 @@
         const btn = document.createElement('button');
         btn.id = BTN_ID;
         btn.type = 'button';
-        btn.title = 'Kopier produkter (beskrivelse + antall)';
-        btn.setAttribute('aria-label', 'Kopier produkter');
+        btn.title = 'Copy products (description + quantity)';
+        btn.setAttribute('aria-label', 'Copy products');
         // Match the vertical-tab styling so it blends with the existing icons.
         if (referenceTab && referenceTab.className) {
             btn.className = referenceTab.className.replace(/_ActiveTabTrigger[^ ]*/g, '').trim();
