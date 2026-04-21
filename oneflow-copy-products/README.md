@@ -15,12 +15,15 @@ Adds a **Kopier** button to the vertical tab sidebar on an Oneflow document. Cli
 ## Output format
 
 ```
-IWMAC HW: Mini Gateway | 1 pcs
-Leveres av Wethal
-IWMAC Modul: Refrigeration
-IWMAC Image: System image - Machinery
-- Maskinbilde | 2 pcs
-- Varme/isvannsbilde
-Per refrigeration position/section including image | 50 pcs
+**IWMAC Product: HW - Gateway and Display**
+- IWMAC HW: Mini Gateway | 1 pcs
+- Leveres av Wethal
+**IWMAC Modul: Refrigeration**
+- IWMAC Image: System image - Machinery
+- - Maskinbilde | 2 pcs
+- - Varme/isvannsbilde
+- Per refrigeration position/section including image | 50 pcs
 ...
 ```
+
+Module section names (`IWMAC Product:` / `IWMAC Modul:`) are rendered as **bold** markdown headers; everything else as bullet items.

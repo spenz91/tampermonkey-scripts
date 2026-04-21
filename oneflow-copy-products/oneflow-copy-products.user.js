@@ -2,7 +2,7 @@
 // @name         Oneflow Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.0.0
+// @version      1.1.0
 // @description  Adds a sidebar button on Oneflow that copies product description + quantity (antall) from the tilbud PDF.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -83,13 +83,17 @@
 
             if (!desc && !antall) continue;
 
+            const isHeader = /^IWMAC\s+(Product|Modul):/i.test(desc);
+
             if (!desc && antall && out.length) {
-                // row contains only the quantity — attach it to the previous description line
+                // row contains only the quantity — attach to previous line
                 out[out.length - 1] = out[out.length - 1] + ' | ' + antall;
+            } else if (isHeader) {
+                out.push('**' + desc + '**');
             } else if (desc && antall) {
-                out.push(desc + ' | ' + antall);
+                out.push('- ' + desc + ' | ' + antall);
             } else if (desc) {
-                out.push(desc);
+                out.push('- ' + desc);
             }
         }
 
