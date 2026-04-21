@@ -2,7 +2,7 @@
 // @name         Oneflow Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.4.1
+// @version      1.5.0
 // @description  Adds a sidebar button on Oneflow that copies product description + quantity (antall) from the tilbud PDF as rich HTML (bold headers + bullet list).
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -85,7 +85,23 @@
             } else if (isHeader) {
                 items.push({ type: 'header', desc });
             } else if (desc) {
-                items.push({ type: 'bullet', desc, antall });
+                // Sub-item row (e.g. "- Maskinbilde") that happens to share its
+                // visual line with the parent's quantity: re-attribute the antall
+                // to the most recent parent bullet above.
+                const isSubItem = /^-\s/.test(desc);
+                if (
+                    isSubItem &&
+                    antall &&
+                    items.length &&
+                    items[items.length - 1].type === 'bullet' &&
+                    !/^-\s/.test(items[items.length - 1].desc) &&
+                    !items[items.length - 1].antall
+                ) {
+                    items[items.length - 1].antall = antall;
+                    items.push({ type: 'bullet', desc, antall: '' });
+                } else {
+                    items.push({ type: 'bullet', desc, antall });
+                }
             }
         }
 
