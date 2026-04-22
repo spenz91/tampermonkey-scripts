@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.5
+// @version      2.2.6
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -478,8 +478,9 @@
                     z-index: 2147483646;
                     opacity: 0;
                     visibility: hidden;
-                    transition: opacity 120ms ease, left 80ms ease, top 80ms ease,
-                                width 80ms ease, height 80ms ease;
+                    /* no position transitions: snap to the cell to avoid
+                       perceived blink when mouseover fires repeatedly */
+                    transition: opacity 100ms ease;
                 }
                 #rl-hover-focus-box.is-visible {
                     opacity: 1;
@@ -616,11 +617,7 @@
                 for (const c of cells) {
                     if (cellKey(c) === hoverKey) {
                         if (c !== hoverCell) hoverCell = c;
-                        const rect = c.getBoundingClientRect();
-                        focusBoxEl.style.left = rect.left + 'px';
-                        focusBoxEl.style.top = rect.top + 'px';
-                        focusBoxEl.style.width = rect.width + 'px';
-                        focusBoxEl.style.height = rect.height + 'px';
+                        showFocusBox(c);
                         break;
                     }
                 }
@@ -682,11 +679,29 @@
         function showFocusBox(cell) {
             const box = ensureFocusBox();
             const rect = cell.getBoundingClientRect();
-            box.style.left = rect.left + 'px';
-            box.style.top = rect.top + 'px';
-            box.style.width = rect.width + 'px';
-            box.style.height = rect.height + 'px';
-            box.classList.add('is-visible');
+            const left = Math.round(rect.left);
+            const top = Math.round(rect.top);
+            const width = Math.round(rect.width);
+            const height = Math.round(rect.height);
+            if (box._rlLeft !== left) {
+                box.style.left = left + 'px';
+                box._rlLeft = left;
+            }
+            if (box._rlTop !== top) {
+                box.style.top = top + 'px';
+                box._rlTop = top;
+            }
+            if (box._rlWidth !== width) {
+                box.style.width = width + 'px';
+                box._rlWidth = width;
+            }
+            if (box._rlHeight !== height) {
+                box.style.height = height + 'px';
+                box._rlHeight = height;
+            }
+            if (!box.classList.contains('is-visible')) {
+                box.classList.add('is-visible');
+            }
         }
 
         function hideFocusBox() {
