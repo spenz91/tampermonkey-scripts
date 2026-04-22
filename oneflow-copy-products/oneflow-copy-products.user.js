@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.10
+// @version      2.2.11
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -508,6 +508,7 @@
                     max-width: ${TIP_MAX_W}px;
                     max-height: ${TIP_MAX_H}px;
                     overflow: auto;
+                    overscroll-behavior: contain;
                     font-size: 13px;
                     line-height: 1.45;
                     box-sizing: border-box;
@@ -668,6 +669,10 @@
                 if (toCell && cellKey(toCell) === hoverKey) return;
                 scheduleHide(120);
             });
+            // Keep wheel/touch scroll inside the tooltip so the grid behind
+            // doesn't scroll and close the tooltip.
+            tipEl.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
+            tipEl.addEventListener('touchmove', (e) => { e.stopPropagation(); }, { passive: true });
             document.body.appendChild(tipEl);
             return tipEl;
         }
