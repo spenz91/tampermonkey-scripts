@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.8
+// @version      2.2.9
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -733,6 +733,31 @@
             tip.style.top = top + 'px';
         }
 
+        // Store + clear title attrs only for the cell we're currently tooltipping,
+        // so the native browser tooltip is suppressed without fighting React on
+        // the rest of the grid.
+        const suppressedTitles = [];
+
+        function suppressTitlesIn(cell) {
+            restoreTitles();
+            const nodes = [cell, ...cell.querySelectorAll('[title]')];
+            for (const n of nodes) {
+                if (n.hasAttribute && n.hasAttribute('title')) {
+                    suppressedTitles.push([n, n.getAttribute('title')]);
+                    n.setAttribute('title', '');
+                }
+            }
+        }
+
+        function restoreTitles() {
+            while (suppressedTitles.length) {
+                const [n, val] = suppressedTitles.pop();
+                if (n && n.isConnected && n.getAttribute('title') === '') {
+                    n.setAttribute('title', val);
+                }
+            }
+        }
+
         function showTipFor(cell) {
             cancelHide();
             const tip = ensureTip();
@@ -742,6 +767,7 @@
             // Only re-render content when we move to a different logical cell.
             if (key !== hoverKey) {
                 hoverKey = key;
+                suppressTitlesIn(cell);
                 tip.innerHTML = getCellHtml(cell);
                 positionTip(tip, cell);
             }
@@ -751,6 +777,7 @@
         function hideTip() {
             if (tipEl) tipEl.classList.remove('is-visible');
             hideFocusBox();
+            restoreTitles();
             hoverCell = null;
             hoverKey = null;
         }
