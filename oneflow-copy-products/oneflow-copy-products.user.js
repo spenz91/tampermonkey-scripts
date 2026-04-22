@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.3
+// @version      2.2.4
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -467,12 +467,23 @@
                 [class*="rc-tooltip"] {
                     display: none !important;
                 }
-                /* light-blue outline on the hovered comment cell */
-                .ag-cell.rl-hover-focus {
-                    box-shadow: inset 0 0 0 2px #60a5fa !important;
-                    background-color: rgba(96, 165, 250, 0.08) !important;
+                /* floating light-blue outline anchored over the hovered cell */
+                #rl-hover-focus-box {
+                    position: fixed;
+                    pointer-events: none;
+                    border: 2px solid #60a5fa;
+                    background: rgba(96, 165, 250, 0.08);
                     border-radius: 3px;
-                    transition: box-shadow 120ms ease, background-color 120ms ease;
+                    box-sizing: border-box;
+                    z-index: 2147483646;
+                    opacity: 0;
+                    visibility: hidden;
+                    transition: opacity 120ms ease, left 80ms ease, top 80ms ease,
+                                width 80ms ease, height 80ms ease;
+                }
+                #rl-hover-focus-box.is-visible {
+                    opacity: 1;
+                    visibility: visible;
                 }
                 /* custom hover tooltip matching the popup editor style */
                 #${TOOLTIP_ID} {
@@ -598,15 +609,10 @@
                 el.setAttribute('data-rl-title', el.getAttribute('title'));
                 el.removeAttribute('title');
             });
-            // remove stale hover-focus class from any cell that isn't the one
-            // the tooltip is currently anchored to (guards against ag-grid
-            // DOM recycling leaving the class behind)
-            document.querySelectorAll('.ag-cell.rl-hover-focus').forEach((el) => {
-                if (el !== hoverCell) el.classList.remove('rl-hover-focus');
-            });
         }
 
         let tipEl = null;
+        let focusBoxEl = null;
         let hoverCell = null;
         let hideTimer = null;
 
@@ -633,6 +639,28 @@
             });
             document.body.appendChild(tipEl);
             return tipEl;
+        }
+
+        function ensureFocusBox() {
+            if (focusBoxEl && document.body.contains(focusBoxEl)) return focusBoxEl;
+            focusBoxEl = document.createElement('div');
+            focusBoxEl.id = 'rl-hover-focus-box';
+            document.body.appendChild(focusBoxEl);
+            return focusBoxEl;
+        }
+
+        function showFocusBox(cell) {
+            const box = ensureFocusBox();
+            const rect = cell.getBoundingClientRect();
+            box.style.left = rect.left + 'px';
+            box.style.top = rect.top + 'px';
+            box.style.width = rect.width + 'px';
+            box.style.height = rect.height + 'px';
+            box.classList.add('is-visible');
+        }
+
+        function hideFocusBox() {
+            if (focusBoxEl) focusBoxEl.classList.remove('is-visible');
         }
 
         function stripNativeTitles(root) {
@@ -686,18 +714,11 @@
             tip.style.top = top + 'px';
         }
 
-        function clearAllHoverFocus(except) {
-            document.querySelectorAll('.ag-cell.rl-hover-focus').forEach((el) => {
-                if (el !== except) el.classList.remove('rl-hover-focus');
-            });
-        }
-
         function showTipFor(cell) {
             cancelHide();
             const tip = ensureTip();
-            clearAllHoverFocus(cell);
             hoverCell = cell;
-            cell.classList.add('rl-hover-focus');
+            showFocusBox(cell);
             tip.innerHTML = getCellHtml(cell);
             positionTip(tip, cell);
             tip.classList.add('is-visible');
@@ -705,7 +726,7 @@
 
         function hideTip() {
             if (tipEl) tipEl.classList.remove('is-visible');
-            clearAllHoverFocus(null);
+            hideFocusBox();
             hoverCell = null;
         }
 
@@ -719,12 +740,9 @@
 
             const cell = t.closest && t.closest('.ag-cell');
             if (!cell) {
-                clearAllHoverFocus(null);
                 scheduleHide(120);
                 return;
             }
-            // any other cell that still has focus class is stale
-            clearAllHoverFocus(cell);
 
             // remove native browser tooltip ("black box") coming from title attrs
             stripNativeTitles(cell);
@@ -734,12 +752,16 @@
                 hideTip();
                 return;
             }
-            if (cell === hoverCell) { cancelHide(); return; }
+            if (cell === hoverCell) {
+                cancelHide();
+                // keep focus box aligned in case the cell moved
+                showFocusBox(cell);
+                return;
+            }
             if (!cellHasRichContent(cell)) {
                 scheduleHide(120);
                 return;
             }
-            hoverCell = cell;
             showTipFor(cell);
         }
 
