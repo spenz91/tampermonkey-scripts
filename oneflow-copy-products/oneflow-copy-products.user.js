@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.12
+// @version      2.2.13
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -457,25 +457,26 @@
             const style = document.createElement('style');
             style.id = STYLE_ID;
             style.textContent = `
-                /* hide ag-grid's default dark tooltip always */
+                /* make ag-grid's default dark tooltip invisible (keep
+                   layout so the library doesn't retry positioning) */
                 .ag-tooltip,
                 .ag-tooltip-custom {
-                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
                 }
-                /* hide every other tooltip variant only while our own
-                   comment tooltip is active, so Rocketlane UI isn't
-                   affected the rest of the time */
+                /* neutralize only dedicated tooltip components while our
+                   own comment tooltip is active.  We keep them rendered
+                   but invisible so the host library doesn't keep
+                   re-creating / re-positioning them (which causes
+                   flicker). */
                 body.rl-tooltip-active [role="tooltip"]:not(#${TOOLTIP_ID}),
-                body.rl-tooltip-active [class*="tippy"],
                 body.rl-tooltip-active [data-tippy-root],
-                body.rl-tooltip-active [class*="Tooltip_"]:not(#${TOOLTIP_ID}),
-                body.rl-tooltip-active [class*="tooltip_"]:not(#${TOOLTIP_ID}),
-                body.rl-tooltip-active [class*="ant-tooltip"],
-                body.rl-tooltip-active [class*="rc-tooltip"],
-                body.rl-tooltip-active [class*="MuiTooltip"],
-                body.rl-tooltip-active [class*="Popover_"],
-                body.rl-tooltip-active [class*="popover_"] {
-                    display: none !important;
+                body.rl-tooltip-active [class*="tippy-box"],
+                body.rl-tooltip-active .tippy-content {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
                 }
                 /* floating light-blue outline anchored over the hovered cell */
                 #rl-hover-focus-box {
