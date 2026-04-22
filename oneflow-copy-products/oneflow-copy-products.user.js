@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.11
+// @version      2.2.12
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -845,11 +845,35 @@
             scheduleHide(120);
         }
 
+        function onWheel(e) {
+            if (!tipEl || !tipEl.classList.contains('is-visible')) return;
+            const target = e.target;
+            const inTip = isInTip(target);
+            let inCell = false;
+            if (!inTip && target && target.closest) {
+                const cell = target.closest('.ag-cell');
+                inCell = !!(cell && cellKey(cell) === hoverKey);
+            }
+            if (!inTip && !inCell) return;
+            // If cursor is over our cell, redirect wheel to the tooltip
+            // and prevent the grid from scrolling (which would close it).
+            if (inCell) {
+                tipEl.scrollTop += e.deltaY;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            // If cursor is over the tooltip, let the tooltip scroll normally
+            // but stop the event from bubbling to the grid.
+            e.stopPropagation();
+        }
+
         function installHover() {
             if (installHover._done) return;
             installHover._done = true;
             document.addEventListener('mouseover', onMouseOver, true);
             document.addEventListener('mouseout', onMouseOut, true);
+            document.addEventListener('wheel', onWheel, { capture: true, passive: false });
             document.addEventListener('scroll', (e) => {
                 if (isInTip(e.target)) return;
                 hideTip();
