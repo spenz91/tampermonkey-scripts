@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.0
+// @version      2.2.1
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -457,9 +457,14 @@
             const style = document.createElement('style');
             style.id = STYLE_ID;
             style.textContent = `
-                /* hide ag-grid's default dark tooltip */
+                /* hide default dark tooltips (ag-grid + other libs) */
                 .ag-tooltip,
-                .ag-tooltip-custom {
+                .ag-tooltip-custom,
+                [role="tooltip"]:not(#${TOOLTIP_ID}),
+                [class*="Tooltip__"]:not(#${TOOLTIP_ID}),
+                [class*="tooltip_"][class*="dark"],
+                [class*="ant-tooltip"],
+                [class*="rc-tooltip"] {
                     display: none !important;
                 }
                 /* custom hover tooltip matching the popup editor style */
@@ -476,7 +481,7 @@
                     overflow: auto;
                     font-size: 13px;
                     line-height: 1.45;
-                    pointer-events: none;
+                    pointer-events: auto;
                     box-sizing: border-box;
                     display: none;
                 }
@@ -574,15 +579,54 @@
             wrappers.forEach(applyInlineSize);
         }
 
+        function sweepTitles() {
+            document.querySelectorAll('.ag-cell[title], .ag-cell [title]').forEach((el) => {
+                el.setAttribute('data-rl-title', el.getAttribute('title'));
+                el.removeAttribute('title');
+            });
+        }
+
         let tipEl = null;
         let hoverCell = null;
+        let hideTimer = null;
+
+        function cancelHide() {
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        }
+        function scheduleHide(delay) {
+            cancelHide();
+            hideTimer = setTimeout(() => {
+                hideTimer = null;
+                hideTip();
+            }, delay != null ? delay : 120);
+        }
 
         function ensureTip() {
             if (tipEl && document.body.contains(tipEl)) return tipEl;
             tipEl = document.createElement('div');
             tipEl.id = TOOLTIP_ID;
+            tipEl.addEventListener('mouseenter', cancelHide);
+            tipEl.addEventListener('mouseleave', (e) => {
+                const to = e.relatedTarget;
+                if (hoverCell && to && hoverCell.contains(to)) return;
+                scheduleHide(120);
+            });
             document.body.appendChild(tipEl);
             return tipEl;
+        }
+
+        function stripNativeTitles(root) {
+            if (!root) return;
+            if (root.hasAttribute && root.hasAttribute('title')) {
+                root.setAttribute('data-rl-title', root.getAttribute('title'));
+                root.removeAttribute('title');
+            }
+            if (root.querySelectorAll) {
+                root.querySelectorAll('[title]').forEach((el) => {
+                    el.setAttribute('data-rl-title', el.getAttribute('title'));
+                    el.removeAttribute('title');
+                });
+            }
         }
 
         function cellHasRichContent(cell) {
@@ -624,6 +668,7 @@
         }
 
         function showTipFor(cell) {
+            cancelHide();
             const tip = ensureTip();
             tip.innerHTML = getCellHtml(cell);
             positionTip(tip, cell);
@@ -634,20 +679,28 @@
             hoverCell = null;
         }
 
+        function isInTip(node) {
+            return tipEl && node && (node === tipEl || tipEl.contains(node));
+        }
+
         function onMouseOver(e) {
-            const cell = e.target.closest && e.target.closest('.ag-cell');
-            if (!cell) {
-                hideTip();
-                return;
-            }
+            const t = e.target;
+            if (isInTip(t)) { cancelHide(); return; }
+
+            const cell = t.closest && t.closest('.ag-cell');
+            if (!cell) { scheduleHide(120); return; }
+
+            // remove native browser tooltip ("black box") coming from title attrs
+            stripNativeTitles(cell);
+
             // don't show tooltip while an editor popup is open
             if (document.querySelector('.ag-popup-editor')) {
                 hideTip();
                 return;
             }
-            if (cell === hoverCell) return;
+            if (cell === hoverCell) { cancelHide(); return; }
             if (!cellHasRichContent(cell)) {
-                hideTip();
+                scheduleHide(120);
                 return;
             }
             hoverCell = cell;
@@ -655,10 +708,10 @@
         }
 
         function onMouseOut(e) {
-            if (!hoverCell) return;
             const to = e.relatedTarget;
-            if (to && hoverCell.contains(to)) return;
-            hideTip();
+            if (isInTip(to)) { cancelHide(); return; }
+            if (hoverCell && to && hoverCell.contains(to)) return;
+            scheduleHide(120);
         }
 
         function installHover() {
@@ -666,11 +719,16 @@
             installHover._done = true;
             document.addEventListener('mouseover', onMouseOver, true);
             document.addEventListener('mouseout', onMouseOut, true);
-            document.addEventListener('scroll', hideTip, true);
+            document.addEventListener('scroll', (e) => {
+                if (isInTip(e.target)) return;
+                hideTip();
+            }, true);
             window.addEventListener('blur', hideTip);
+            // sweep existing title attrs on grid cells
+            stripNativeTitles(document.body);
         }
 
-        return { injectStyle, scanPopups, installHover };
+        return { injectStyle, scanPopups, installHover, sweepTitles };
     })();
 
     // ---------------------------------------------------------------------
@@ -690,7 +748,10 @@
     const tick = () => {
         if (isHubSpot) HUBSPOT.injectButton();
         if (isOneflow) ONEFLOW.injectButton();
-        if (isRocketlane) ROCKETLANE.scanPopups();
+        if (isRocketlane) {
+            ROCKETLANE.scanPopups();
+            ROCKETLANE.sweepTitles();
+        }
     };
 
     const obs = new MutationObserver(tick);
