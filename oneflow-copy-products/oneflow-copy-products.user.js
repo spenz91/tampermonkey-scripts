@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.15
+// @version      2.3.0
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -517,11 +517,17 @@
                     visibility: hidden;
                     pointer-events: none;
                     transition: opacity 140ms ease, visibility 140ms;
+                    user-select: text;
+                    -webkit-user-select: text;
                 }
                 #${TOOLTIP_ID}.is-visible {
                     opacity: 1;
                     visibility: visible;
                     pointer-events: auto;
+                }
+                #${TOOLTIP_ID} * {
+                    user-select: text;
+                    -webkit-user-select: text;
                 }
                 #${TOOLTIP_ID} p { margin: 0 0 6px; }
                 #${TOOLTIP_ID} p:last-child { margin-bottom: 0; }
@@ -529,7 +535,6 @@
                 #${TOOLTIP_ID} ol { margin: 4px 0 6px; padding-left: 22px; }
                 #${TOOLTIP_ID} li { margin: 2px 0; }
                 .ag-popup-editor [data-field-type="MultiLineText"],
-                .ag-popup-editor [data-field-type="SingleLineText"],
                 .ag-popup-editor [data-field-type="RichText"] {
                     max-width: 95vw;
                     max-height: 90vh;
@@ -545,7 +550,6 @@
                     position: relative !important;
                 }
                 .ag-popup-editor [data-field-type="MultiLineText"] > *,
-                .ag-popup-editor [data-field-type="SingleLineText"] > *,
                 .ag-popup-editor [data-field-type="RichText"] > * {
                     position: absolute !important;
                     inset: 0 !important;
@@ -556,7 +560,8 @@
                     box-sizing: border-box !important;
                     display: block !important;
                 }
-                .ag-popup-editor [data-field-type] [id^="editor_"] {
+                .ag-popup-editor [data-field-type="MultiLineText"] [id^="editor_"],
+                .ag-popup-editor [data-field-type="RichText"] [id^="editor_"] {
                     position: absolute !important;
                     inset: 0 !important;
                     width: auto !important;
@@ -568,8 +573,10 @@
                     max-height: none !important;
                     min-height: 0 !important;
                 }
-                .ag-popup-editor [data-field-type] .ck-editor__editable_inline,
-                .ag-popup-editor [data-field-type] .ck.ck-editor__editable {
+                .ag-popup-editor [data-field-type="MultiLineText"] .ck-editor__editable_inline,
+                .ag-popup-editor [data-field-type="MultiLineText"] .ck.ck-editor__editable,
+                .ag-popup-editor [data-field-type="RichText"] .ck-editor__editable_inline,
+                .ag-popup-editor [data-field-type="RichText"] .ck.ck-editor__editable {
                     position: absolute !important;
                     inset: 0 !important;
                     width: auto !important;
@@ -589,7 +596,10 @@
         function applyInlineSize(wrapper) {
             if (!wrapper || wrapper.dataset.rlResized === '1') return;
             const fieldType = wrapper.getAttribute('data-field-type') || '';
-            if (!/MultiLineText|RichText|SingleLineText/i.test(fieldType)) return;
+            // Only resize genuine comment / rich-text popups.  Leave plain
+            // single-line text, number and other small editors alone so
+            // Rocketlane can size and position them normally.
+            if (!/MultiLineText|RichText/i.test(fieldType)) return;
             wrapper.dataset.rlResized = '1';
             wrapper.style.setProperty('width', DEFAULT_W + 'px');
             wrapper.style.setProperty('height', DEFAULT_H + 'px');
@@ -674,8 +684,71 @@
             // doesn't scroll and close the tooltip.
             tipEl.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
             tipEl.addEventListener('touchmove', (e) => { e.stopPropagation(); }, { passive: true });
+
+            // Click-through behavior: if the user clicks (not drags) on the
+            // tooltip we treat it as a click on the underlying cell, so the
+            // edit popup opens.  A drag is left alone so text can be selected
+            // and copied from the tooltip.
+            let downPos = null;
+            tipEl.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                const c = currentHoverCellEl();
+                downPos = { x: e.clientX, y: e.clientY, cell: c };
+            });
+            tipEl.addEventListener('mouseup', (e) => {
+                const d = downPos;
+                downPos = null;
+                if (!d || e.button !== 0) return;
+                if (Math.abs(e.clientX - d.x) > 3 || Math.abs(e.clientY - d.y) > 3) return;
+                // Swallow the real click; we'll dispatch our own on the cell.
+                e.preventDefault();
+                e.stopPropagation();
+                const cell = d.cell || currentHoverCellEl();
+                if (!cell) { hideTip(); return; }
+                openCellEditor(cell);
+            });
+            tipEl.addEventListener('click', (e) => {
+                // Prevent the native click on the tooltip from reaching anyone
+                // when we forwarded it; harmless otherwise.
+                e.stopPropagation();
+            }, true);
+
             document.body.appendChild(tipEl);
             return tipEl;
+        }
+
+        function currentHoverCellEl() {
+            if (hoverCell && document.body.contains(hoverCell)) return hoverCell;
+            if (!hoverKey) return null;
+            const cells = document.querySelectorAll('.ag-cell');
+            for (const c of cells) if (cellKey(c) === hoverKey) return c;
+            return null;
+        }
+
+        function openCellEditor(cell) {
+            hideTip();
+            // Temporarily neutralize the tooltip so elementFromPoint returns
+            // the real cell under the cursor / cell center.
+            const rect = cell.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const prevPE = tipEl ? tipEl.style.pointerEvents : '';
+            if (tipEl) tipEl.style.pointerEvents = 'none';
+            const target = document.elementFromPoint(cx, cy) || cell;
+            if (tipEl) tipEl.style.pointerEvents = prevPE;
+
+            // HTMLElement.click() fires a real click event that React /
+            // ag-grid delegation picks up reliably.
+            if (typeof target.click === 'function') {
+                try { target.click(); } catch (_) { /* ignore */ }
+            }
+            // Some grids require a double-click to enter edit mode.
+            const mk = (type) => new MouseEvent(type, {
+                bubbles: true, cancelable: true, composed: true, view: window,
+                clientX: cx, clientY: cy, screenX: cx, screenY: cy,
+                button: 0, buttons: 0, detail: type === 'dblclick' ? 2 : 1,
+            });
+            target.dispatchEvent(mk('dblclick'));
         }
 
         function ensureFocusBox() {
@@ -726,7 +799,12 @@
             const rich = cell.querySelector(
                 '[class*="rich-text-editor"], .ck-content, [class*="multi-line-text"]'
             );
-            return !!(rich && rich.textContent.trim().length > 0);
+            if (!rich) return false;
+            const text = rich.textContent.replace(/\s+/g, ' ').trim();
+            // ignore "empty" placeholder renderings like "", "—", "-", "n/a".
+            if (text.length < 2) return false;
+            if (/^[\-\u2013\u2014\u2022\s.]+$/.test(text)) return false;
+            return true;
         }
 
         function getCellHtml(cell) {
@@ -754,31 +832,6 @@
             tip.style.top = top + 'px';
         }
 
-        // Store + clear title attrs only for the cell we're currently tooltipping,
-        // so the native browser tooltip is suppressed without fighting React on
-        // the rest of the grid.
-        const suppressedTitles = [];
-
-        function suppressTitlesIn(cell) {
-            restoreTitles();
-            const nodes = [cell, ...cell.querySelectorAll('[title]')];
-            for (const n of nodes) {
-                if (n.hasAttribute && n.hasAttribute('title')) {
-                    suppressedTitles.push([n, n.getAttribute('title')]);
-                    n.setAttribute('title', '');
-                }
-            }
-        }
-
-        function restoreTitles() {
-            while (suppressedTitles.length) {
-                const [n, val] = suppressedTitles.pop();
-                if (n && n.isConnected && n.getAttribute('title') === '') {
-                    n.setAttribute('title', val);
-                }
-            }
-        }
-
         function showTipFor(cell) {
             cancelHide();
             const tip = ensureTip();
@@ -788,7 +841,6 @@
             // Only re-render content when we move to a different logical cell.
             if (key !== hoverKey) {
                 hoverKey = key;
-                suppressTitlesIn(cell);
                 tip.innerHTML = getCellHtml(cell);
                 positionTip(tip, cell);
             }
@@ -799,7 +851,6 @@
         function hideTip() {
             if (tipEl) tipEl.classList.remove('is-visible');
             hideFocusBox();
-            restoreTitles();
             document.body.classList.remove('rl-tooltip-active');
             hoverCell = null;
             hoverKey = null;
@@ -846,38 +897,14 @@
             scheduleHide(120);
         }
 
-        function forwardOrHide(e) {
-            if (!tipEl || !tipEl.classList.contains('is-visible')) {
-                hideTip();
-                return;
-            }
-            if (!isInTip(e.target)) {
-                hideTip();
-                return;
-            }
-            // User clicked inside the tooltip. Hide it, find the element
-            // beneath the cursor, and replay the click there.
-            const x = e.clientX;
-            const y = e.clientY;
-            const btn = e.button;
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation && e.stopImmediatePropagation();
-            tipEl.style.pointerEvents = 'none';
-            tipEl.style.visibility = 'hidden';
+        function onMouseDown(e) {
+            // Do nothing unless our tooltip is actually on screen - we never
+            // want to interfere with normal cell click / edit behavior.
+            if (!tipEl || !tipEl.classList.contains('is-visible')) return;
+            // Clicks inside the tooltip are handled by the tooltip's own
+            // mouseup listener (drag = text selection, click = open editor).
+            if (isInTip(e.target)) return;
             hideTip();
-            const under = document.elementFromPoint(x, y);
-            tipEl.style.pointerEvents = '';
-            tipEl.style.visibility = '';
-            if (!under) return;
-            const opts = {
-                bubbles: true, cancelable: true, composed: true,
-                clientX: x, clientY: y, screenX: e.screenX, screenY: e.screenY,
-                button: btn, buttons: e.buttons, detail: 1, view: window,
-            };
-            under.dispatchEvent(new MouseEvent('mousedown', opts));
-            under.dispatchEvent(new MouseEvent('mouseup', opts));
-            under.dispatchEvent(new MouseEvent('click', opts));
         }
 
         function onWheel(e) {
@@ -913,10 +940,9 @@
                 if (isInTip(e.target)) return;
                 hideTip();
             }, true);
-            // If a mousedown lands on our tooltip, the user almost certainly
-            // meant to click the cell behind it.  Hide the tooltip and
-            // re-dispatch the click to whatever is actually underneath.
-            document.addEventListener('mousedown', forwardOrHide, true);
+            // Hide the tooltip on mousedown outside it; leave mousedown
+            // inside the tooltip alone so text selection / copy works.
+            document.addEventListener('mousedown', onMouseDown, true);
             window.addEventListener('blur', hideTip);
         }
 
@@ -947,7 +973,19 @@
         }
     };
 
-    const obs = new MutationObserver(tick);
+    // Debounce so a burst of DOM mutations during e.g. a cell click doesn't
+    // cause hundreds of synchronous scans and starve the host app's handlers.
+    let tickScheduled = false;
+    const scheduleTick = () => {
+        if (tickScheduled) return;
+        tickScheduled = true;
+        requestAnimationFrame(() => {
+            tickScheduled = false;
+            try { tick(); } catch (_) { /* ignore */ }
+        });
+    };
+
+    const obs = new MutationObserver(scheduleTick);
     obs.observe(document.documentElement, { childList: true, subtree: true });
     tick();
 })();
