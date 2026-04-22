@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.2
+// @version      2.2.3
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -598,6 +598,12 @@
                 el.setAttribute('data-rl-title', el.getAttribute('title'));
                 el.removeAttribute('title');
             });
+            // remove stale hover-focus class from any cell that isn't the one
+            // the tooltip is currently anchored to (guards against ag-grid
+            // DOM recycling leaving the class behind)
+            document.querySelectorAll('.ag-cell.rl-hover-focus').forEach((el) => {
+                if (el !== hoverCell) el.classList.remove('rl-hover-focus');
+            });
         }
 
         let tipEl = null;
@@ -680,12 +686,16 @@
             tip.style.top = top + 'px';
         }
 
+        function clearAllHoverFocus(except) {
+            document.querySelectorAll('.ag-cell.rl-hover-focus').forEach((el) => {
+                if (el !== except) el.classList.remove('rl-hover-focus');
+            });
+        }
+
         function showTipFor(cell) {
             cancelHide();
             const tip = ensureTip();
-            if (hoverCell && hoverCell !== cell) {
-                hoverCell.classList.remove('rl-hover-focus');
-            }
+            clearAllHoverFocus(cell);
             hoverCell = cell;
             cell.classList.add('rl-hover-focus');
             tip.innerHTML = getCellHtml(cell);
@@ -695,7 +705,7 @@
 
         function hideTip() {
             if (tipEl) tipEl.classList.remove('is-visible');
-            if (hoverCell) hoverCell.classList.remove('rl-hover-focus');
+            clearAllHoverFocus(null);
             hoverCell = null;
         }
 
@@ -708,7 +718,13 @@
             if (isInTip(t)) { cancelHide(); return; }
 
             const cell = t.closest && t.closest('.ag-cell');
-            if (!cell) { scheduleHide(120); return; }
+            if (!cell) {
+                clearAllHoverFocus(null);
+                scheduleHide(120);
+                return;
+            }
+            // any other cell that still has focus class is stale
+            clearAllHoverFocus(cell);
 
             // remove native browser tooltip ("black box") coming from title attrs
             stripNativeTitles(cell);
