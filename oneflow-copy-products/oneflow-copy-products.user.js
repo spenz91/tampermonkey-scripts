@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.14
+// @version      2.2.15
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -846,6 +846,40 @@
             scheduleHide(120);
         }
 
+        function forwardOrHide(e) {
+            if (!tipEl || !tipEl.classList.contains('is-visible')) {
+                hideTip();
+                return;
+            }
+            if (!isInTip(e.target)) {
+                hideTip();
+                return;
+            }
+            // User clicked inside the tooltip. Hide it, find the element
+            // beneath the cursor, and replay the click there.
+            const x = e.clientX;
+            const y = e.clientY;
+            const btn = e.button;
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation && e.stopImmediatePropagation();
+            tipEl.style.pointerEvents = 'none';
+            tipEl.style.visibility = 'hidden';
+            hideTip();
+            const under = document.elementFromPoint(x, y);
+            tipEl.style.pointerEvents = '';
+            tipEl.style.visibility = '';
+            if (!under) return;
+            const opts = {
+                bubbles: true, cancelable: true, composed: true,
+                clientX: x, clientY: y, screenX: e.screenX, screenY: e.screenY,
+                button: btn, buttons: e.buttons, detail: 1, view: window,
+            };
+            under.dispatchEvent(new MouseEvent('mousedown', opts));
+            under.dispatchEvent(new MouseEvent('mouseup', opts));
+            under.dispatchEvent(new MouseEvent('click', opts));
+        }
+
         function onWheel(e) {
             if (!tipEl || !tipEl.classList.contains('is-visible')) return;
             const target = e.target;
@@ -879,9 +913,10 @@
                 if (isInTip(e.target)) return;
                 hideTip();
             }, true);
-            // Close the tooltip on any click so it can't intercept the click
-            // that opens the ag-grid cell editor (or any other Rocketlane UI).
-            document.addEventListener('mousedown', () => hideTip(), true);
+            // If a mousedown lands on our tooltip, the user almost certainly
+            // meant to click the cell behind it.  Hide the tooltip and
+            // re-dispatch the click to whatever is actually underneath.
+            document.addEventListener('mousedown', forwardOrHide, true);
             window.addEventListener('blur', hideTip);
         }
 
