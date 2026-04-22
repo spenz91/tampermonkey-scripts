@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.0.0
+// @version      2.1.4
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -10,6 +10,7 @@
 // @match        https://app.hubspot.com/*
 // @match        https://app-eu1.hubspot.com/*
 // @match        https://*.hubspot.com/*
+// @match        https://*.rocketlane.com/*
 // @grant        GM_setClipboard
 // @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/oneflow-copy-products/oneflow-copy-products.user.js
 // @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/oneflow-copy-products/oneflow-copy-products.user.js
@@ -440,16 +441,126 @@
     })();
 
     // ---------------------------------------------------------------------
+    // Rocketlane: make the ag-grid cell-editor popup bigger and resizable
+    // ---------------------------------------------------------------------
+
+    const ROCKETLANE = (function () {
+        const STYLE_ID = 'rl-popup-editor-resize-style';
+        const DEFAULT_W = 640;
+        const DEFAULT_H = 420;
+
+        function injectStyle() {
+            if (document.getElementById(STYLE_ID)) return;
+            const style = document.createElement('style');
+            style.id = STYLE_ID;
+            style.textContent = `
+                .ag-popup-editor [data-field-type="MultiLineText"],
+                .ag-popup-editor [data-field-type="SingleLineText"],
+                .ag-popup-editor [data-field-type="RichText"] {
+                    max-width: 95vw;
+                    max-height: 90vh;
+                    min-width: 320px;
+                    min-height: 240px;
+                    resize: both !important;
+                    overflow: hidden !important;
+                    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+                    border-radius: 6px;
+                    background: #fff;
+                    box-sizing: border-box !important;
+                    padding: 0 !important;
+                    position: relative !important;
+                }
+                .ag-popup-editor [data-field-type="MultiLineText"] > *,
+                .ag-popup-editor [data-field-type="SingleLineText"] > *,
+                .ag-popup-editor [data-field-type="RichText"] > * {
+                    position: absolute !important;
+                    inset: 0 !important;
+                    width: auto !important;
+                    height: auto !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    box-sizing: border-box !important;
+                    display: block !important;
+                }
+                .ag-popup-editor [data-field-type] [id^="editor_"] {
+                    position: absolute !important;
+                    inset: 0 !important;
+                    width: auto !important;
+                    height: auto !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    box-sizing: border-box !important;
+                    display: block !important;
+                    max-height: none !important;
+                    min-height: 0 !important;
+                }
+                .ag-popup-editor [data-field-type] .ck-editor__editable_inline,
+                .ag-popup-editor [data-field-type] .ck.ck-editor__editable {
+                    position: absolute !important;
+                    inset: 0 !important;
+                    width: auto !important;
+                    height: auto !important;
+                    margin: 0 !important;
+                    overflow-y: auto !important;
+                    overflow-x: hidden !important;
+                    max-height: none !important;
+                    min-height: 0 !important;
+                    resize: none !important;
+                    box-sizing: border-box !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        }
+
+        function applyInlineSize(wrapper) {
+            if (!wrapper || wrapper.dataset.rlResized === '1') return;
+            const fieldType = wrapper.getAttribute('data-field-type') || '';
+            if (!/MultiLineText|RichText|SingleLineText/i.test(fieldType)) return;
+            wrapper.dataset.rlResized = '1';
+            wrapper.style.setProperty('width', DEFAULT_W + 'px');
+            wrapper.style.setProperty('height', DEFAULT_H + 'px');
+
+            const popup = wrapper.closest('.ag-popup-editor');
+            if (popup) {
+                const rect = popup.getBoundingClientRect();
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                if (rect.left + DEFAULT_W > vw - 8) {
+                    const newLeft = Math.max(8, vw - DEFAULT_W - 16);
+                    popup.style.left = newLeft + 'px';
+                }
+                if (rect.top + DEFAULT_H > vh - 8) {
+                    const newTop = Math.max(8, vh - DEFAULT_H - 16);
+                    popup.style.top = newTop + 'px';
+                }
+            }
+        }
+
+        function scanPopups() {
+            const wrappers = document.querySelectorAll(
+                '.ag-popup-editor [data-field-type]'
+            );
+            wrappers.forEach(applyInlineSize);
+        }
+
+        return { injectStyle, scanPopups };
+    })();
+
+    // ---------------------------------------------------------------------
     // Router: pick the right injector for the current host
     // ---------------------------------------------------------------------
 
     const host = location.hostname;
     const isHubSpot = /hubspot\.com$/i.test(host);
     const isOneflow = /oneflow\.com$/i.test(host);
+    const isRocketlane = /rocketlane\.com$/i.test(host);
+
+    if (isRocketlane) ROCKETLANE.injectStyle();
 
     const tick = () => {
         if (isHubSpot) HUBSPOT.injectButton();
         if (isOneflow) ONEFLOW.injectButton();
+        if (isRocketlane) ROCKETLANE.scanPopups();
     };
 
     const obs = new MutationObserver(tick);
