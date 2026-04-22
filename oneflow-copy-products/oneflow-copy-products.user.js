@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.1
+// @version      2.2.2
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -467,6 +467,13 @@
                 [class*="rc-tooltip"] {
                     display: none !important;
                 }
+                /* light-blue outline on the hovered comment cell */
+                .ag-cell.rl-hover-focus {
+                    box-shadow: inset 0 0 0 2px #60a5fa !important;
+                    background-color: rgba(96, 165, 250, 0.08) !important;
+                    border-radius: 3px;
+                    transition: box-shadow 120ms ease, background-color 120ms ease;
+                }
                 /* custom hover tooltip matching the popup editor style */
                 #${TOOLTIP_ID} {
                     position: fixed;
@@ -481,9 +488,16 @@
                     overflow: auto;
                     font-size: 13px;
                     line-height: 1.45;
-                    pointer-events: auto;
                     box-sizing: border-box;
-                    display: none;
+                    opacity: 0;
+                    visibility: hidden;
+                    pointer-events: none;
+                    transition: opacity 140ms ease, visibility 140ms;
+                }
+                #${TOOLTIP_ID}.is-visible {
+                    opacity: 1;
+                    visibility: visible;
+                    pointer-events: auto;
                 }
                 #${TOOLTIP_ID} p { margin: 0 0 6px; }
                 #${TOOLTIP_ID} p:last-child { margin-bottom: 0; }
@@ -654,7 +668,6 @@
             const rect = cell.getBoundingClientRect();
             tip.style.left = '-9999px';
             tip.style.top = '0px';
-            tip.style.display = 'block';
             const tw = Math.min(TIP_MAX_W, tip.offsetWidth);
             const th = Math.min(TIP_MAX_H, tip.offsetHeight);
             const vw = window.innerWidth;
@@ -670,12 +683,19 @@
         function showTipFor(cell) {
             cancelHide();
             const tip = ensureTip();
+            if (hoverCell && hoverCell !== cell) {
+                hoverCell.classList.remove('rl-hover-focus');
+            }
+            hoverCell = cell;
+            cell.classList.add('rl-hover-focus');
             tip.innerHTML = getCellHtml(cell);
             positionTip(tip, cell);
+            tip.classList.add('is-visible');
         }
 
         function hideTip() {
-            if (tipEl) tipEl.style.display = 'none';
+            if (tipEl) tipEl.classList.remove('is-visible');
+            if (hoverCell) hoverCell.classList.remove('rl-hover-focus');
             hoverCell = null;
         }
 
