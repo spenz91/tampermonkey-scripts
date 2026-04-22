@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.13
+// @version      2.2.14
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -879,10 +879,13 @@
                 if (isInTip(e.target)) return;
                 hideTip();
             }, true);
+            // Close the tooltip on any click so it can't intercept the click
+            // that opens the ag-grid cell editor (or any other Rocketlane UI).
+            document.addEventListener('mousedown', () => hideTip(), true);
             window.addEventListener('blur', hideTip);
         }
 
-        return { injectStyle, scanPopups, installHover, reanchorFocusBox };
+        return { injectStyle, scanPopups, installHover, reanchorFocusBox, hideTip };
     })();
 
     // ---------------------------------------------------------------------
@@ -905,6 +908,7 @@
         if (isRocketlane) {
             ROCKETLANE.scanPopups();
             ROCKETLANE.reanchorFocusBox();
+            if (document.querySelector('.ag-popup-editor')) ROCKETLANE.hideTip();
         }
     };
 
