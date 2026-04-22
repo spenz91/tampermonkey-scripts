@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.7
+// @version      2.2.8
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -457,14 +457,9 @@
             const style = document.createElement('style');
             style.id = STYLE_ID;
             style.textContent = `
-                /* hide default dark tooltips (ag-grid + other libs) */
+                /* hide ag-grid's default dark tooltip only */
                 .ag-tooltip,
-                .ag-tooltip-custom,
-                [role="tooltip"]:not(#${TOOLTIP_ID}),
-                [class*="Tooltip__"]:not(#${TOOLTIP_ID}),
-                [class*="tooltip_"][class*="dark"],
-                [class*="ant-tooltip"],
-                [class*="rc-tooltip"] {
+                .ag-tooltip-custom {
                     display: none !important;
                 }
                 /* floating light-blue outline anchored over the hovered cell */
@@ -605,21 +600,15 @@
             wrappers.forEach(applyInlineSize);
         }
 
-        function sweepTitles() {
-            document.querySelectorAll('.ag-cell[title], .ag-cell [title]').forEach((el) => {
-                el.setAttribute('data-rl-title', el.getAttribute('title'));
-                el.removeAttribute('title');
-            });
-            // Re-anchor the focus box to the current DOM cell matching hoverKey,
-            // since ag-grid may recycle cell elements while the tooltip is open.
-            if (hoverKey && focusBoxEl && focusBoxEl.classList.contains('is-visible')) {
-                const cells = document.querySelectorAll('.ag-cell');
-                for (const c of cells) {
-                    if (cellKey(c) === hoverKey) {
-                        if (c !== hoverCell) hoverCell = c;
-                        showFocusBox(c);
-                        break;
-                    }
+        function reanchorFocusBox() {
+            if (!hoverKey || !focusBoxEl) return;
+            if (!focusBoxEl.classList.contains('is-visible')) return;
+            const cells = document.querySelectorAll('.ag-cell');
+            for (const c of cells) {
+                if (cellKey(c) === hoverKey) {
+                    if (c !== hoverCell) hoverCell = c;
+                    showFocusBox(c);
+                    break;
                 }
             }
         }
@@ -708,19 +697,6 @@
             if (focusBoxEl) focusBoxEl.classList.remove('is-visible');
         }
 
-        function stripNativeTitles(root) {
-            if (!root) return;
-            if (root.hasAttribute && root.hasAttribute('title')) {
-                root.setAttribute('data-rl-title', root.getAttribute('title'));
-                root.removeAttribute('title');
-            }
-            if (root.querySelectorAll) {
-                root.querySelectorAll('[title]').forEach((el) => {
-                    el.setAttribute('data-rl-title', el.getAttribute('title'));
-                    el.removeAttribute('title');
-                });
-            }
-        }
 
         function cellHasRichContent(cell) {
             if (!cell) return false;
@@ -793,9 +769,6 @@
                 return;
             }
 
-            // remove native browser tooltip ("black box") coming from title attrs
-            stripNativeTitles(cell);
-
             // don't show tooltip while an editor popup is open
             if (document.querySelector('.ag-popup-editor')) {
                 hideTip();
@@ -833,11 +806,9 @@
                 hideTip();
             }, true);
             window.addEventListener('blur', hideTip);
-            // sweep existing title attrs on grid cells
-            stripNativeTitles(document.body);
         }
 
-        return { injectStyle, scanPopups, installHover, sweepTitles };
+        return { injectStyle, scanPopups, installHover, reanchorFocusBox };
     })();
 
     // ---------------------------------------------------------------------
@@ -859,7 +830,7 @@
         if (isOneflow) ONEFLOW.injectButton();
         if (isRocketlane) {
             ROCKETLANE.scanPopups();
-            ROCKETLANE.sweepTitles();
+            ROCKETLANE.reanchorFocusBox();
         }
     };
 
