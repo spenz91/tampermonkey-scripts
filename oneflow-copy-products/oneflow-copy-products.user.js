@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.6
+// @version      2.2.7
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -724,14 +724,12 @@
 
         function cellHasRichContent(cell) {
             if (!cell) return false;
+            // only genuine rich-text / multi-line comment cells,
+            // never icon / badge / progress / status cells
             const rich = cell.querySelector(
                 '[class*="rich-text-editor"], .ck-content, [class*="multi-line-text"]'
             );
-            if (rich && rich.textContent.trim().length > 0) return true;
-            // also show for any cell whose text is visibly clipped
-            const inner = cell.querySelector('.ag-cell-value') || cell;
-            return inner.scrollWidth > inner.clientWidth + 1 ||
-                   inner.scrollHeight > inner.clientHeight + 1;
+            return !!(rich && rich.textContent.trim().length > 0);
         }
 
         function getCellHtml(cell) {
