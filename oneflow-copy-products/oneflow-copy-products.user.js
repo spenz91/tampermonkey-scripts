@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.2.4
+// @version      2.2.5
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -609,12 +609,41 @@
                 el.setAttribute('data-rl-title', el.getAttribute('title'));
                 el.removeAttribute('title');
             });
+            // Re-anchor the focus box to the current DOM cell matching hoverKey,
+            // since ag-grid may recycle cell elements while the tooltip is open.
+            if (hoverKey && focusBoxEl && focusBoxEl.classList.contains('is-visible')) {
+                const cells = document.querySelectorAll('.ag-cell');
+                for (const c of cells) {
+                    if (cellKey(c) === hoverKey) {
+                        if (c !== hoverCell) hoverCell = c;
+                        const rect = c.getBoundingClientRect();
+                        focusBoxEl.style.left = rect.left + 'px';
+                        focusBoxEl.style.top = rect.top + 'px';
+                        focusBoxEl.style.width = rect.width + 'px';
+                        focusBoxEl.style.height = rect.height + 'px';
+                        break;
+                    }
+                }
+            }
         }
 
         let tipEl = null;
         let focusBoxEl = null;
         let hoverCell = null;
+        let hoverKey = null;
         let hideTimer = null;
+
+        // Stable identifier for a cell that survives ag-grid DOM recycling.
+        function cellKey(cell) {
+            if (!cell) return null;
+            const row = cell.closest('[row-id]') ||
+                        cell.closest('.ag-row');
+            const colId = cell.getAttribute('col-id') || '';
+            const rowId = row ? (row.getAttribute('row-id') ||
+                                  row.getAttribute('row-index') || '') : '';
+            if (!rowId && !colId) return null;
+            return rowId + '|' + colId;
+        }
 
         function cancelHide() {
             if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
@@ -634,7 +663,8 @@
             tipEl.addEventListener('mouseenter', cancelHide);
             tipEl.addEventListener('mouseleave', (e) => {
                 const to = e.relatedTarget;
-                if (hoverCell && to && hoverCell.contains(to)) return;
+                const toCell = to && to.closest && to.closest('.ag-cell');
+                if (toCell && cellKey(toCell) === hoverKey) return;
                 scheduleHide(120);
             });
             document.body.appendChild(tipEl);
@@ -717,10 +747,15 @@
         function showTipFor(cell) {
             cancelHide();
             const tip = ensureTip();
+            const key = cellKey(cell);
             hoverCell = cell;
             showFocusBox(cell);
-            tip.innerHTML = getCellHtml(cell);
-            positionTip(tip, cell);
+            // Only re-render content when we move to a different logical cell.
+            if (key !== hoverKey) {
+                hoverKey = key;
+                tip.innerHTML = getCellHtml(cell);
+                positionTip(tip, cell);
+            }
             tip.classList.add('is-visible');
         }
 
@@ -728,6 +763,7 @@
             if (tipEl) tipEl.classList.remove('is-visible');
             hideFocusBox();
             hoverCell = null;
+            hoverKey = null;
         }
 
         function isInTip(node) {
@@ -752,9 +788,10 @@
                 hideTip();
                 return;
             }
-            if (cell === hoverCell) {
+            const key = cellKey(cell);
+            if (key && key === hoverKey) {
                 cancelHide();
-                // keep focus box aligned in case the cell moved
+                hoverCell = cell;
                 showFocusBox(cell);
                 return;
             }
@@ -768,7 +805,8 @@
         function onMouseOut(e) {
             const to = e.relatedTarget;
             if (isInTip(to)) { cancelHide(); return; }
-            if (hoverCell && to && hoverCell.contains(to)) return;
+            const toCell = to && to.closest && to.closest('.ag-cell');
+            if (toCell && cellKey(toCell) === hoverKey) { cancelHide(); return; }
             scheduleHide(120);
         }
 
