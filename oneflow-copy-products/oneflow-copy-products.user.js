@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.3.3
+// @version      2.3.4
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -217,7 +217,8 @@
                 /^Side\s+\d+\s*\/\s*\d+/i.test(text) ||
                 /^Signert\b/i.test(text) ||
                 /^Kundeinformasjon\b/i.test(text) ||
-                /^Tilbud\s+\d{5,}/i.test(text)
+                /^Tilbud\s+\d{5,}/i.test(text) ||
+                /^--\s*\d+\s+of\s+\d+\s*--/i.test(text)
             );
         }
 
@@ -247,7 +248,7 @@
                 const qtyMin = cols ? cols.antallMinLeft : 74;
                 const qtyMax = cols ? cols.antallMaxLeft : 84;
 
-                const desc = row.items
+                let desc = row.items
                     .filter(i => i.left < descMaxLeft && !isPriceLikeToken(i.text))
                     .map(i => i.text)
                     .join('')
@@ -259,13 +260,33 @@
                 );
                 const antall = antallItem ? antallItem.text.trim() : '';
 
+                // Fallback for group-header rows (e.g. "IWMAC Product: Images")
+                // that sit at the very bottom of a page and sometimes don't
+                // line up with the detected description column.
+                const headerFromRow = rowText.match(/^(IWMAC\s+(?:Product|Modul):\s*[^0-9]+?)(?=\s*(?:\d|$))/i);
+                if (!desc && headerFromRow && !antall) {
+                    desc = headerFromRow[1].trim();
+                }
+
                 if (!desc && !antall) continue;
 
                 const isHeader = /^IWMAC\s+(Product|Modul):/i.test(desc);
 
                 if (!desc && antall && items.length) {
-                    const last = items[items.length - 1];
-                    if (last.type === 'bullet') last.antall = antall;
+                    // The antall-only row belongs to the main description
+                    // that started the trailing block of sub-description
+                    // bullets, not the last sub-line.  Walk back through
+                    // consecutive no-antall bullets until we hit a header
+                    // or a bullet that already has an antall.
+                    let idx = items.length - 1;
+                    while (idx > 0) {
+                        const prev = items[idx - 1];
+                        if (prev.type !== 'bullet' || prev.antall) break;
+                        idx--;
+                    }
+                    if (items[idx] && items[idx].type === 'bullet') {
+                        items[idx].antall = antall;
+                    }
                 } else if (isHeader) {
                     items.push({ type: 'header', desc });
                 } else if (desc) {
