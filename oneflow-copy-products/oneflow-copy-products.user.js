@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.3.6
+// @version      2.3.7
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -407,6 +407,48 @@
             }, 1500);
         }
 
+        // react-pdf lazy-renders pages on scroll: every `._PdfPage_` placeholder
+        // only gets its `.react-pdf__Page__textContent` once it is scrolled into
+        // view.  Force-render every page before extracting so multi-page
+        // offers don't stop at the end of page 1.
+        function ensureAllPagesRendered() {
+            return new Promise((resolve) => {
+                const pages = [...document.querySelectorAll('._PdfPage_iv0eo_10, [class*="_PdfPage_"]')];
+                if (!pages.length) { resolve(); return; }
+
+                const scroller =
+                    document.querySelector('._Scrollable_vt0q8_62') ||
+                    pages[0].closest('[class*="_Scrollable_"]') ||
+                    document.scrollingElement;
+                const originalScrollTop = scroller ? scroller.scrollTop : 0;
+
+                const isRendered = (p) => !!p.querySelector('.react-pdf__Page__textContent span[role="presentation"]');
+
+                let i = 0;
+                const step = () => {
+                    if (i >= pages.length) {
+                        if (scroller) scroller.scrollTop = originalScrollTop;
+                        resolve();
+                        return;
+                    }
+                    const page = pages[i];
+                    if (isRendered(page)) { i++; step(); return; }
+
+                    try { page.scrollIntoView({ block: 'center', behavior: 'instant' }); }
+                    catch (e) { page.scrollIntoView({ block: 'center' }); }
+
+                    const start = Date.now();
+                    const waitForPage = () => {
+                        if (isRendered(page)) { i++; step(); return; }
+                        if (Date.now() - start > 2500) { i++; step(); return; }
+                        setTimeout(waitForPage, 80);
+                    };
+                    setTimeout(waitForPage, 80);
+                };
+                step();
+            });
+        }
+
         function buildButton(referenceTab) {
             const btn = document.createElement('button');
             btn.id = BTN_ID;
@@ -419,15 +461,21 @@
             btn.innerHTML = COPY_SVG;
             btn.style.cursor = 'pointer';
             btn.addEventListener('click', async () => {
-                const items = extractItems();
-                if (!items.length) {
-                    flashButton(btn, false);
-                    return;
+                btn.disabled = true;
+                try {
+                    await ensureAllPagesRendered();
+                    const items = extractItems();
+                    if (!items.length) {
+                        flashButton(btn, false);
+                        return;
+                    }
+                    const html = itemsToHtml(items);
+                    const plain = itemsToPlain(items);
+                    const ok = await copyRich(html, plain);
+                    flashButton(btn, ok);
+                } finally {
+                    btn.disabled = false;
                 }
-                const html = itemsToHtml(items);
-                const plain = itemsToPlain(items);
-                const ok = await copyRich(html, plain);
-                flashButton(btn, ok);
             });
             return btn;
         }
