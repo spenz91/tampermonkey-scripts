@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.3.1
+// @version      2.3.2
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -143,18 +143,39 @@
                 const hit = headerRow.items.find(i => re.test(i.text));
                 return hit ? hit.left : null;
             };
+            // Reconstruct the full text of a header cell that may have been
+            // split across multiple spans (e.g. "Rabattert" + "Pris/stk").
+            const findColByJoined = (re) => {
+                const txts = headerRow.items.map(i => i.text);
+                for (let i = 0; i < headerRow.items.length; i++) {
+                    for (let len = 1; len <= 4 && i + len <= headerRow.items.length; len++) {
+                        const joined = txts.slice(i, i + len).join(' ').replace(/\s+/g, ' ').trim();
+                        if (re.test(joined)) return headerRow.items[i].left;
+                    }
+                }
+                return null;
+            };
             const descLeft = findCol(/Beskrivelse/i);
-            const antallLeft = findCol(/Antall/i);
+            const prisLeft = findColByJoined(/^Pris\s*\/\s*stk/i);
+            const rabattLeft = findCol(/^Rabatt$/i);
+            const rabattertLeft = findColByJoined(/^Rabattert\s*Pris\s*\/\s*stk/i);
+            const antallLeft = findCol(/^Antall/i);
             const sumLeft = findCol(/^Sum/i);
             if (descLeft == null || antallLeft == null) return null;
+
+            // First non-description column is whichever one sits closest to,
+            // but right of, the Beskrivelse column.
+            const candidates = [prisLeft, rabattLeft, rabattertLeft, antallLeft]
+                .filter(v => v != null && v > descLeft);
+            const firstNonDescLeft = candidates.length ? Math.min(...candidates) : antallLeft;
 
             return {
                 headerTop: headerRow.top,
                 descLeft,
                 antallLeft,
-                // Everything strictly left of this boundary counts as
-                // "description"; keeps price / discount columns out.
-                descMaxLeft: antallLeft - 4,
+                // Description = spans left of the first non-desc column.
+                // Keeps Pris/stk, Rabatt, Rabattert Pris/stk, Sum out.
+                descMaxLeft: firstNonDescLeft - 2,
                 // Any span whose left-edge sits inside [antallLeft-2 .. sumLeft-2]
                 // is considered the quantity cell.
                 antallMinLeft: antallLeft - 2,
@@ -187,8 +208,12 @@
                 const qtyMin = cols ? cols.antallMinLeft : 74;
                 const qtyMax = cols ? cols.antallMaxLeft : 84;
 
+                const isPriceOrPct = (t) =>
+                    // "3 140,00" / "3 140.00" / "30%" / "1 pcs"
+                    /^\s*\d[\d\s.,]*(?:%|\s*pcs)?\s*$/i.test(t);
+
                 const desc = row.items
-                    .filter(i => i.left < descMaxLeft)
+                    .filter(i => i.left < descMaxLeft && !isPriceOrPct(i.text))
                     .map(i => i.text)
                     .join('')
                     .replace(/\s+/g, ' ')
