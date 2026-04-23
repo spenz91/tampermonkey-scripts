@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.3.4
+// @version      2.3.5
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -271,13 +271,17 @@
                 if (!desc && !antall) continue;
 
                 const isHeader = /^IWMAC\s+(Product|Modul):/i.test(desc);
+                // Only these prefixes indicate a "main" item.  Anything else
+                // (e.g. "3 x OJ Master", "360.02 Sosiale rom", "Emicon VP x 2",
+                // "Brannsentral - Previdia Max", "Oversiktsbilde for lysstyring",
+                // "HW i abo") is a sub-description of the preceding main item.
+                const mainPrefix = /^(IWMAC|Integration|Per|Freight)\b/i;
 
                 if (!desc && antall && items.length) {
-                    // The antall-only row belongs to the main description
-                    // that started the trailing block of sub-description
-                    // bullets, not the last sub-line.  Walk back through
-                    // consecutive no-antall bullets until we hit a header
-                    // or a bullet that already has an antall.
+                    // Antall-only row.  Walk back through consecutive
+                    // no-antall bullets until we hit a header or a bullet
+                    // that already has an antall, then attach to the first
+                    // bullet in that block (the main description).
                     let idx = items.length - 1;
                     while (idx > 0) {
                         const prev = items[idx - 1];
@@ -289,24 +293,30 @@
                     }
                 } else if (isHeader) {
                     items.push({ type: 'header', desc });
-                } else if (desc) {
-                    // Sub-item row (e.g. "- Maskinbilde") that happens to share its
-                    // visual line with the parent's quantity: re-attribute the antall
-                    // to the most recent parent bullet above.
-                    const isSubItem = /^-\s/.test(desc);
-                    if (
-                        isSubItem &&
-                        antall &&
-                        items.length &&
-                        items[items.length - 1].type === 'bullet' &&
-                        !/^-\s/.test(items[items.length - 1].desc) &&
-                        !items[items.length - 1].antall
-                    ) {
-                        items[items.length - 1].antall = antall;
+                } else if (desc && antall && !mainPrefix.test(desc)) {
+                    // Row has both a description and an antall, but the
+                    // description is actually a sub-line that visually
+                    // shares a row with the parent's price cell (e.g.
+                    // "3 x OJ Master 9 644,00 30% 6 750,80 4 pcs 27 003,20").
+                    // Re-attach the antall to the nearest preceding main
+                    // bullet that has no antall yet, and push this row as
+                    // a plain sub-description (no quantity).
+                    let idx = items.length - 1;
+                    while (idx >= 0) {
+                        const cur = items[idx];
+                        if (cur.type === 'header') { idx = -1; break; }
+                        if (cur.antall) { idx = -1; break; }
+                        if (mainPrefix.test(cur.desc)) break;
+                        idx--;
+                    }
+                    if (idx >= 0 && items[idx] && items[idx].type === 'bullet' && !items[idx].antall) {
+                        items[idx].antall = antall;
                         items.push({ type: 'bullet', desc, antall: '' });
                     } else {
                         items.push({ type: 'bullet', desc, antall });
                     }
+                } else if (desc) {
+                    items.push({ type: 'bullet', desc, antall });
                 }
             }
 
