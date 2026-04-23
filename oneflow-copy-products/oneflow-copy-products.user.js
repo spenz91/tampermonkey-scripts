@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.3.2
+// @version      2.3.3
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -101,28 +101,38 @@
         }
 
         function buildRows() {
-            const spans = document.querySelectorAll(
-                '.react-pdf__Page__textContent span[role="presentation"]'
-            );
-            if (!spans.length) return [];
+            // Multi-page PDFs: every react-pdf page has its own 0-100% top
+            // space, so we must group rows per page and concatenate in page
+            // order.  Collecting across all pages in one map corrupts the
+            // layout (rows from page 3 land on top of page 2 at the same
+            // top percentage).
+            const pages = document.querySelectorAll('.react-pdf__Page__textContent');
+            if (!pages.length) return [];
 
-            const byTop = new Map();
-            for (const s of spans) {
-                const style = s.getAttribute('style');
-                const top = parsePct(style, 'top');
-                const left = parsePct(style, 'left');
-                if (top == null || left == null) continue;
-                const key = (Math.round(top * 4) / 4).toFixed(2);
-                if (!byTop.has(key)) byTop.set(key, []);
-                byTop.get(key).push({ left, top, text: s.textContent });
-            }
-
-            return [...byTop.entries()]
-                .map(([k, items]) => ({
-                    top: parseFloat(k),
-                    items: items.sort((a, b) => a.left - b.left),
-                }))
-                .sort((a, b) => a.top - b.top);
+            const rows = [];
+            pages.forEach((page, pageIndex) => {
+                const spans = page.querySelectorAll('span[role="presentation"]');
+                if (!spans.length) return;
+                const byTop = new Map();
+                for (const s of spans) {
+                    const style = s.getAttribute('style');
+                    const top = parsePct(style, 'top');
+                    const left = parsePct(style, 'left');
+                    if (top == null || left == null) continue;
+                    const key = (Math.round(top * 4) / 4).toFixed(2);
+                    if (!byTop.has(key)) byTop.set(key, []);
+                    byTop.get(key).push({ left, top, text: s.textContent });
+                }
+                const pageRows = [...byTop.entries()]
+                    .map(([k, items]) => ({
+                        pageIndex,
+                        top: parseFloat(k),
+                        items: items.sort((a, b) => a.left - b.left),
+                    }))
+                    .sort((a, b) => a.top - b.top);
+                rows.push(...pageRows);
+            });
+            return rows;
         }
 
         // Locate the header row ("Beskrivelse ... Antall ...") and read the
@@ -183,6 +193,34 @@
             };
         }
 
+        // Recognise pure price / discount / quantity tokens without swallowing
+        // bare digits that are part of a description like "3 x OJ Master".
+        function isPriceLikeToken(t) {
+            const s = (t || '').trim();
+            if (!s) return false;
+            // "3 140,00", "419,00", "3,14"  (Norwegian price with comma decimal)
+            if (/^\d{1,3}(?:[ .]\d{3})*,\d{2}$/.test(s)) return true;
+            // "30%", "12.5%"
+            if (/^\d+(?:[.,]\d+)?\s*%$/.test(s)) return true;
+            // "1 pcs", "13 pcs"
+            if (/^\d+\s*pcs$/i.test(s)) return true;
+            return false;
+        }
+
+        // Rows that appear on continuation pages but are not part of the
+        // table (page header / footer, Oneflow ID etc.).
+        function isNonTableRow(text) {
+            return (
+                /^Tilbud\s+Tilbudsdato/i.test(text) ||
+                /^Generelle\s+Salgs/i.test(text) ||
+                /^Oneflow\s+ID\b/i.test(text) ||
+                /^Side\s+\d+\s*\/\s*\d+/i.test(text) ||
+                /^Signert\b/i.test(text) ||
+                /^Kundeinformasjon\b/i.test(text) ||
+                /^Tilbud\s+\d{5,}/i.test(text)
+            );
+        }
+
         function extractItems() {
             const rows = buildRows();
             if (!rows.length) return [];
@@ -193,27 +231,24 @@
             let started = false;
 
             for (const row of rows) {
-                const rowText = row.items.map(i => i.text).join('').trim();
+                const rowText = row.items.map(i => i.text).join('').replace(/\s+/g, ' ').trim();
 
                 if (!started) {
-                    if (cols && row.top > cols.headerTop) started = true;
-                    else if (/Beskrivelse/i.test(rowText)) started = true;
-                    else continue;
-                    if (!started) continue;
+                    if (/Beskrivelse/i.test(rowText) && /Antall/i.test(rowText)) {
+                        started = true;
+                    }
+                    continue; // header / pre-table rows never become items
                 }
 
                 if (/Installasjonkostnader|Listepris|Sum\s*eks\.?\s*mva|Totalsum|Sluttsum/i.test(rowText)) break;
+                if (isNonTableRow(rowText)) continue;
 
                 const descMaxLeft = cols ? cols.descMaxLeft : 45;
                 const qtyMin = cols ? cols.antallMinLeft : 74;
                 const qtyMax = cols ? cols.antallMaxLeft : 84;
 
-                const isPriceOrPct = (t) =>
-                    // "3 140,00" / "3 140.00" / "30%" / "1 pcs"
-                    /^\s*\d[\d\s.,]*(?:%|\s*pcs)?\s*$/i.test(t);
-
                 const desc = row.items
-                    .filter(i => i.left < descMaxLeft && !isPriceOrPct(i.text))
+                    .filter(i => i.left < descMaxLeft && !isPriceLikeToken(i.text))
                     .map(i => i.text)
                     .join('')
                     .replace(/\s+/g, ' ')
