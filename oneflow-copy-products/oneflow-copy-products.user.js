@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.3.0
+// @version      2.3.1
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -125,30 +125,77 @@
                 .sort((a, b) => a.top - b.top);
         }
 
+        // Locate the header row ("Beskrivelse ... Antall ...") and read the
+        // left-edge of each column so we can classify cells by position on any
+        // PDF layout instead of relying on fixed percentages.
+        function detectColumns(rows) {
+            let headerRow = null;
+            for (const r of rows) {
+                const txt = r.items.map(i => i.text).join('').replace(/\s+/g, ' ').trim();
+                if (/Beskrivelse/i.test(txt) && /Antall/i.test(txt)) {
+                    headerRow = r;
+                    break;
+                }
+            }
+            if (!headerRow) return null;
+
+            const findCol = (re) => {
+                const hit = headerRow.items.find(i => re.test(i.text));
+                return hit ? hit.left : null;
+            };
+            const descLeft = findCol(/Beskrivelse/i);
+            const antallLeft = findCol(/Antall/i);
+            const sumLeft = findCol(/^Sum/i);
+            if (descLeft == null || antallLeft == null) return null;
+
+            return {
+                headerTop: headerRow.top,
+                descLeft,
+                antallLeft,
+                // Everything strictly left of this boundary counts as
+                // "description"; keeps price / discount columns out.
+                descMaxLeft: antallLeft - 4,
+                // Any span whose left-edge sits inside [antallLeft-2 .. sumLeft-2]
+                // is considered the quantity cell.
+                antallMinLeft: antallLeft - 2,
+                antallMaxLeft: (sumLeft != null ? sumLeft : antallLeft + 10) - 2,
+            };
+        }
+
         function extractItems() {
             const rows = buildRows();
             if (!rows.length) return [];
+
+            const cols = detectColumns(rows);
 
             const items = [];
             let started = false;
 
             for (const row of rows) {
                 const rowText = row.items.map(i => i.text).join('').trim();
+
                 if (!started) {
-                    if (/Beskrivelse/i.test(rowText)) started = true;
-                    continue;
+                    if (cols && row.top > cols.headerTop) started = true;
+                    else if (/Beskrivelse/i.test(rowText)) started = true;
+                    else continue;
+                    if (!started) continue;
                 }
-                if (/Installasjonkostnader|Listepris|Sum eks mva/i.test(rowText)) break;
+
+                if (/Installasjonkostnader|Listepris|Sum\s*eks\.?\s*mva|Totalsum|Sluttsum/i.test(rowText)) break;
+
+                const descMaxLeft = cols ? cols.descMaxLeft : 45;
+                const qtyMin = cols ? cols.antallMinLeft : 74;
+                const qtyMax = cols ? cols.antallMaxLeft : 84;
 
                 const desc = row.items
-                    .filter(i => i.left < 45)
+                    .filter(i => i.left < descMaxLeft)
                     .map(i => i.text)
                     .join('')
                     .replace(/\s+/g, ' ')
                     .trim();
 
                 const antallItem = row.items.find(
-                    i => i.left > 74 && i.left < 84 && /\d+\s*pcs/i.test(i.text)
+                    i => i.left >= qtyMin && i.left <= qtyMax && /\d+\s*pcs/i.test(i.text)
                 );
                 const antall = antallItem ? antallItem.text.trim() : '';
 
@@ -234,13 +281,16 @@
         }
 
         function itemsToPlain(items) {
-            const body = items
-                .map(it => {
-                    if (it.type === 'header') return it.desc;
-                    return '• ' + it.desc + (it.antall ? ' — ' + it.antall : '');
-                })
-                .join('\n');
-            return 'Oneflow document info:\n' + body;
+            const lines = [];
+            items.forEach((it, idx) => {
+                if (it.type === 'header') {
+                    if (idx > 0) lines.push('');
+                    lines.push(it.desc);
+                } else {
+                    lines.push('• ' + it.desc + (it.antall ? ' — ' + it.antall : ''));
+                }
+            });
+            return 'Oneflow document info:\n' + lines.join('\n');
         }
 
         function flashButton(btn, ok) {
