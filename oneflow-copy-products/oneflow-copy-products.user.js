@@ -2,7 +2,7 @@
 // @name         Oneflow + HubSpot Copy Products
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.3.5
+// @version      2.3.6
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
 // @author       spenz91
 // @match        https://app.oneflow.com/*
@@ -225,6 +225,10 @@
         function extractItems() {
             const rows = buildRows();
             if (!rows.length) return [];
+            try {
+                const pageCount = document.querySelectorAll('.react-pdf__Page__textContent').length;
+                console.debug('[oneflow-copy] PDF pages rendered:', pageCount, 'rows:', rows.length);
+            } catch (e) {}
 
             const cols = detectColumns(rows);
 
@@ -241,8 +245,18 @@
                     continue; // header / pre-table rows never become items
                 }
 
-                if (/Installasjonkostnader|Listepris|Sum\s*eks\.?\s*mva|Totalsum|Sluttsum/i.test(rowText)) break;
+                // Only stop at a real total/summary row.  Anchor to the
+                // start of the row so a stray "Listepris" / "Totalsum" inside
+                // a description or a page header on a continuation page
+                // doesn't abort the whole extraction half-way through.
+                if (/^(Installasjonkostnader|Listepris|Sum\s*eks\.?\s*mva|Totalsum|Sluttsum)\b/i.test(rowText)) {
+                    try { console.debug('[oneflow-copy] stop at summary row:', rowText); } catch (e) {}
+                    break;
+                }
                 if (isNonTableRow(rowText)) continue;
+                // Skip the repeated column-header row that Oneflow prints at
+                // the top of every continuation page.
+                if (/^Beskrivelse\b/i.test(rowText) && /Antall/i.test(rowText)) continue;
 
                 const descMaxLeft = cols ? cols.descMaxLeft : 45;
                 const qtyMin = cols ? cols.antallMinLeft : 74;
