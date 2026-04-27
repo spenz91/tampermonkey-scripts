@@ -1,18 +1,78 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      1.0
-// @description  Pick a date on Rocketlane My Timesheet and see what plants/projects you logged that day, with hours and notes.
+// @version      2.0
+// @description  Records every IWMAC plant page you visit, then shows them per day on Rocketlane My Timesheet.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
 // @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-day-recap/Rocketlane-Day-Recap.user.js
 // @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-day-recap/Rocketlane-Day-Recap.user.js
 // @match        https://kiona.rocketlane.com/timesheets/*
-// @grant        none
+// @match        http://*.plants.iwmac.local:8080/*
+// @grant        GM_setValue
+// @grant        GM_getValue
 // @run-at       document-idle
 // ==/UserScript==
 
 (function () {
     'use strict';
+
+    const STORAGE_KEY = 'visits';
+    const MAX_VISITS = 5000;
+
+    const host = location.hostname;
+
+    // ---------- Plant page: record visit ----------
+    if (host.endsWith('.plants.iwmac.local')) {
+        recordVisit();
+        return;
+    }
+
+    // ---------- Rocketlane: show panel ----------
+    if (host === 'kiona.rocketlane.com') {
+        initRocketlane();
+        return;
+    }
+
+    function recordVisit() {
+        const m = host.match(/^(\d+)\.plants\.iwmac\.local$/);
+        if (!m) return;
+        const plant_id = m[1];
+
+        // Best-effort plant name from the page
+        const name =
+            (document.querySelector('h1')?.textContent || '').trim() ||
+            (document.title || '').trim() ||
+            '';
+
+        const visits = GM_getValue(STORAGE_KEY, []);
+        const now = Date.now();
+        const today = new Date().toISOString().slice(0, 10); // local-ish; refined on read
+
+        // Dedupe: skip if same plant_id was logged within last 5 minutes
+        const last = visits[visits.length - 1];
+        if (last && last.plant_id === plant_id && (now - last.ts) < 5 * 60 * 1000) {
+            // Update name if we now have a better one
+            if (name && name !== last.name) {
+                last.name = name;
+                GM_setValue(STORAGE_KEY, visits);
+            }
+            return;
+        }
+
+        visits.push({ plant_id, name, ts: now });
+        // Keep last MAX_VISITS only
+        if (visits.length > MAX_VISITS) visits.splice(0, visits.length - MAX_VISITS);
+        GM_setValue(STORAGE_KEY, visits);
+    }
+
+    function initRocketlane() {
+        injectStyle();
+        buildButton();
+        const observer = new MutationObserver(() => {
+            if (!document.getElementById(BTN_ID) && document.body) buildButton();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
 
     const PANEL_ID = 'rl-day-recap-panel';
     const BTN_ID = 'rl-day-recap-fab';
@@ -26,7 +86,7 @@
         }
         #${BTN_ID}:hover { background: #0043ce; }
         #${PANEL_ID} {
-            position: fixed; bottom: 70px; right: 20px; width: 460px; max-height: 70vh;
+            position: fixed; bottom: 70px; right: 20px; width: 420px; max-height: 70vh;
             background: #fff; border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.25);
             font: 13px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #161616;
             z-index: 2147483641; display: flex; flex-direction: column; overflow: hidden;
@@ -47,22 +107,18 @@
         #${PANEL_ID} .controls input[type=date] {
             flex: 1; padding: 6px 8px; border: 1px solid #c6c6c6; border-radius: 4px; font-size: 13px;
         }
-        #${PANEL_ID} .controls button {
-            padding: 6px 12px; background: #0f62fe; color: #fff; border: none;
-            border-radius: 4px; cursor: pointer; font-weight: 600;
-        }
-        #${PANEL_ID} .controls button:hover { background: #0043ce; }
         #${PANEL_ID} .results { overflow: auto; padding: 6px 0; flex: 1; }
         #${PANEL_ID} .row {
-            padding: 10px 14px; border-bottom: 1px solid #f0f0f0; cursor: pointer;
+            padding: 10px 14px; border-bottom: 1px solid #f0f0f0;
+            display: flex; gap: 10px; align-items: baseline;
         }
-        #${PANEL_ID} .row:hover { background: #f4f4f4; }
-        #${PANEL_ID} .row .title { font-weight: 600; }
-        #${PANEL_ID} .row .meta { color: #525252; font-size: 12px; margin-top: 2px; }
-        #${PANEL_ID} .row .notes {
-            margin-top: 6px; padding: 6px 8px; background: #f4f4f4;
-            border-left: 3px solid #0f62fe; border-radius: 2px; white-space: pre-wrap;
+        #${PANEL_ID} .row a {
+            color: #0f62fe; text-decoration: none; font-weight: 600;
+            min-width: 60px;
         }
+        #${PANEL_ID} .row a:hover { text-decoration: underline; }
+        #${PANEL_ID} .row .name { flex: 1; }
+        #${PANEL_ID} .row .time { color: #6f6f6f; font-size: 12px; white-space: nowrap; }
         #${PANEL_ID} .empty { padding: 20px; text-align: center; color: #6f6f6f; }
         #${PANEL_ID} .total {
             padding: 8px 14px; background: #f4f4f4; border-top: 1px solid #e0e0e0;
@@ -78,111 +134,59 @@
         document.head.appendChild(s);
     }
 
-    function getReactProps(el) {
-        const key = Object.keys(el).find(k => k.startsWith('__reactProps$'));
-        return key ? el[key] : null;
-    }
-
     function todayISO() {
         const d = new Date();
         const tz = d.getTimezoneOffset() * 60000;
         return new Date(d - tz).toISOString().slice(0, 10);
     }
 
-    function fmtMinutes(min) {
-        if (!min) return '0m';
-        const h = Math.floor(min / 60), m = min % 60;
-        if (h && m) return `${h}h ${m}m`;
-        if (h) return `${h}h`;
-        return `${m}m`;
+    function tsToLocalISODate(ts) {
+        const d = new Date(ts);
+        const tz = d.getTimezoneOffset() * 60000;
+        return new Date(ts - tz).toISOString().slice(0, 10);
     }
 
-    // Extract entries for a given ISO date (YYYY-MM-DD).
-    function collectEntries(isoDate) {
-        const cells = document.querySelectorAll(`td[data-time-cell="${isoDate}"], div[data-time-cell="${isoDate}"]`);
-        // The actual <td> carries the React props with timeEntries; the inner <div> carries data-time-cell.
-        // Walk to the <td>.
-        const results = [];
-        cells.forEach(node => {
-            const td = node.closest('td');
-            if (!td) return;
-            const tr = td.closest('tr');
-            if (!tr) return;
+    function tsToLocalTime(ts) {
+        return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
 
-            const nameEls = tr.querySelectorAll('[data-cy="timesheet.primary.name"]');
-            const project = nameEls[0]?.textContent?.trim() || '(unknown project)';
-            const work = nameEls[1]?.textContent?.trim() || '';
-
-            const props = getReactProps(td);
-            const entries = (props && Array.isArray(props.timeEntries)) ? props.timeEntries : [];
-
-            // Fallback: read displayed value from the input
-            const input = td.querySelector('input[type=text]');
-            const displayed = input?.value && input.value !== '—' ? input.value : null;
-
-            if (entries.length === 0 && !displayed) return; // empty cell
-            if (entries.length === 0 && displayed) {
-                results.push({ project, work, time: displayed, notes: [] });
-                return;
+    function getVisitsForDate(isoDate) {
+        const all = GM_getValue(STORAGE_KEY, []);
+        const onDay = all.filter(v => tsToLocalISODate(v.ts) === isoDate);
+        // Group by plant_id, keep earliest visit time
+        const map = new Map();
+        for (const v of onDay) {
+            const cur = map.get(v.plant_id);
+            if (!cur || v.ts < cur.ts) {
+                map.set(v.plant_id, { plant_id: v.plant_id, name: v.name || cur?.name || '', ts: v.ts });
+            } else if (!cur.name && v.name) {
+                cur.name = v.name;
             }
-
-            const totalMin = entries.reduce((s, e) => s + (e.minutes || e.duration || 0), 0);
-            const notes = entries
-                .map(e => {
-                    // Notes can live under a few different keys depending on Rocketlane version.
-                    const raw = e.notes || e.note || e.description || e.comment || e.commentHtml || '';
-                    return stripHtml(String(raw)).trim();
-                })
-                .filter(Boolean);
-
-            results.push({
-                project,
-                work,
-                time: totalMin ? fmtMinutes(totalMin) : (displayed || ''),
-                notes,
-                td,
-            });
-        });
-        return results;
+        }
+        return [...map.values()].sort((a, b) => a.ts - b.ts);
     }
 
-    function stripHtml(s) {
-        const div = document.createElement('div');
-        div.innerHTML = s;
-        return div.textContent || '';
-    }
-
-    function render(results, isoDate) {
+    function render(visits, isoDate) {
         const list = document.querySelector(`#${PANEL_ID} .results`);
         const totalEl = document.querySelector(`#${PANEL_ID} .total`);
         list.innerHTML = '';
-        if (!results.length) {
-            list.innerHTML = `<div class="empty">No time logged for ${isoDate}.<br><small>Make sure the timesheet week containing this date is open.</small></div>`;
+        if (!visits.length) {
+            list.innerHTML = `<div class="empty">No plant visits recorded for ${isoDate}.<br><small>Visits are tracked from the moment this script is installed.</small></div>`;
             totalEl.textContent = '';
             return;
         }
-        results.forEach(r => {
+        visits.forEach(v => {
+            const url = `http://${v.plant_id}.plants.iwmac.local:8080/`;
             const div = document.createElement('div');
             div.className = 'row';
-            const notesHtml = r.notes && r.notes.length
-                ? r.notes.map(n => `<div class="notes">${escapeHtml(n)}</div>`).join('')
-                : '';
             div.innerHTML = `
-                <div class="title">${escapeHtml(r.project)}${r.work ? ' — ' + escapeHtml(r.work) : ''}</div>
-                <div class="meta">${escapeHtml(r.time)}</div>
-                ${notesHtml}
+                <a href="${url}" target="_blank">${escapeHtml(v.plant_id)}</a>
+                <div class="name">${escapeHtml(v.name || '(no name captured)')}</div>
+                <div class="time">${tsToLocalTime(v.ts)}</div>
             `;
-            div.addEventListener('click', () => {
-                if (r.td) {
-                    r.td.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    r.td.style.transition = 'box-shadow .4s';
-                    r.td.style.boxShadow = 'inset 0 0 0 2px #0f62fe';
-                    setTimeout(() => { r.td.style.boxShadow = ''; }, 1500);
-                }
-            });
             list.appendChild(div);
         });
-        totalEl.textContent = `${results.length} entr${results.length === 1 ? 'y' : 'ies'}`;
+        totalEl.textContent = `${visits.length} plant${visits.length === 1 ? '' : 's'} visited`;
     }
 
     function escapeHtml(s) {
@@ -195,12 +199,11 @@
         panel.id = PANEL_ID;
         panel.innerHTML = `
             <header>
-                <strong>Day Recap</strong>
+                <strong>Plants visited</strong>
                 <button data-action="close">×</button>
             </header>
             <div class="controls">
                 <input type="date" value="${todayISO()}">
-                <button data-action="find">Find</button>
             </div>
             <div class="results"></div>
             <div class="total"></div>
@@ -208,17 +211,10 @@
         document.body.appendChild(panel);
 
         const dateInput = panel.querySelector('input[type=date]');
-        const run = () => {
-            const iso = dateInput.value;
-            if (!iso) return;
-            render(collectEntries(iso), iso);
-        };
-        panel.querySelector('[data-action=find]').addEventListener('click', run);
+        const run = () => render(getVisitsForDate(dateInput.value), dateInput.value);
         dateInput.addEventListener('change', run);
         panel.querySelector('[data-action=close]').addEventListener('click', () => panel.remove());
-
-        // auto-run on open
-        setTimeout(run, 50);
+        run();
         return panel;
     }
 
@@ -226,29 +222,12 @@
         if (document.getElementById(BTN_ID)) return;
         const btn = document.createElement('button');
         btn.id = BTN_ID;
-        btn.textContent = '📅 Day Recap';
+        btn.textContent = '🏭 Plants visited';
         btn.addEventListener('click', () => {
             const existing = document.getElementById(PANEL_ID);
             if (existing) existing.remove();
             else buildPanel();
         });
         document.body.appendChild(btn);
-    }
-
-    function init() {
-        injectStyle();
-        buildButton();
-    }
-
-    // Rocketlane is a SPA — keep the button alive across route changes.
-    const observer = new MutationObserver(() => {
-        if (!document.getElementById(BTN_ID) && document.body) buildButton();
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
     }
 })();

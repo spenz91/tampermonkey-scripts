@@ -1,6 +1,6 @@
 # Rocketlane Day Recap
 
-Adds a floating **📅 Day Recap** button to the Rocketlane My Timesheet page. Pick a date and see every project/work entry you logged that day — including hours and any notes attached to each entry.
+Tracks every IWMAC plant page you open, then on Rocketlane My Timesheet adds a 🏭 **Plants visited** button — pick a date and see the list of plants you opened that day.
 
 ## Install
 
@@ -8,17 +8,20 @@ Adds a floating **📅 Day Recap** button to the Rocketlane My Timesheet page. P
 
 ## Usage
 
-1. Open `https://kiona.rocketlane.com/timesheets/this-week/my-timesheet` (or any week).
-2. Click the **📅 Day Recap** button (bottom-right).
-3. Pick a date (defaults to today). Click **Find**.
-4. You get a list of every row that has time on that day: project name, work type, hours, and notes.
-5. Click an entry to scroll/highlight the matching cell in the table.
+1. Install the script.
+2. Use IWMAC normally — every time you open `http://<plant_id>.plants.iwmac.local:8080/...` the script silently records the visit (plant_id, page title, timestamp).
+3. Open `https://kiona.rocketlane.com/timesheets/this-week/my-timesheet`.
+4. Click **🏭 Plants visited** (bottom-right). Pick a date.
+5. You get a list: plant_id (clickable link), plant name, time of first visit that day.
 
-> Only the currently loaded week is searched. Navigate to the right week first if the date you want is in another week.
+## Notes
+
+- Visits are stored locally via `GM_setValue` (per-browser, per-Tampermonkey profile). Last 5000 visits are kept.
+- Same plant within 5 minutes is deduped to one entry.
+- **History before install:** none. Pang's API doesn't allow per-user log queries, so the script can only record visits going forward. Past visits won't appear.
+- If you wipe the browser / Tampermonkey storage, the visit log is lost.
 
 ## How it works
 
-- Finds all `td` cells with `data-time-cell="YYYY-MM-DD"`.
-- Reads the React props from each cell to extract `timeEntries` (minutes, notes).
-- Falls back to the displayed input value if React props can't be read.
-- Pulls the project + work-type names from the row's `[data-cy="timesheet.primary.name"]` elements.
+- `@match http://*.plants.iwmac.local:8080/*` — extracts `plant_id` from the subdomain, grabs the page title as the plant name, appends to the `visits` array in `GM_setValue`.
+- `@match https://kiona.rocketlane.com/timesheets/*` — adds the floating button + panel that reads the same `visits` array and filters by selected date.
