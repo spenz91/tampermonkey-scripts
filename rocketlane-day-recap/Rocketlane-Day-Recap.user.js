@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.3
+// @version      3.4
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -13,7 +13,6 @@
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @connect      tools.iwmac.local
-// @connect      toolbox.iwmac.local
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -141,30 +140,6 @@
         });
     }
 
-    function gmFetchPlantName(plant_id) {
-        return new Promise(resolve => {
-            const params = new URLSearchParams();
-            params.append('plant_id', String(plant_id));
-            params.append('sql_command', "SELECT value FROM iw_plant_server3.iw_sys_plant_settings WHERE setting='plant_name' LIMIT 1");
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: 'http://toolbox.iwmac.local:8505/plant-sql/',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                data: params.toString(),
-                onload: r => {
-                    try {
-                        const d = JSON.parse(r.responseText);
-                        const row = d.results?.[0]?.data?.[0];
-                        resolve(row?.value || '');
-                    } catch { resolve(''); }
-                },
-                onerror: () => resolve(''),
-                ontimeout: () => resolve(''),
-                timeout: 10000,
-            });
-        });
-    }
-
     // Run f(item) over items with limited parallelism. Calls onProgress(done, total).
     async function pMap(items, f, parallel, onProgress) {
         const results = new Array(items.length);
@@ -207,7 +182,6 @@
 
         if (known.length === 0) return { visits: [], username, scanned: 0 };
 
-        // Phase 1: history fan-out (90% of progress bar)
         const all = await pMap(known, async (pid) => {
             const entries = await gmFetchHistory(pid);
             const matches = entries.filter(e => {
@@ -224,26 +198,10 @@
                 actions,
                 count: matches.length,
             };
-        }, PARALLEL, (d, t) => onProgress?.(d, t + (all_phase2_total())));
+        }, PARALLEL, onProgress);
 
         const visits = all.filter(Boolean).sort((a, b) => a.first_ts - b.first_ts);
-
-        // Phase 2: fetch missing names for matched plants only
-        const needNames = visits.filter(v => !v.name);
-        if (needNames.length) {
-            await pMap(needNames, async (v) => {
-                const n = await gmFetchPlantName(v.plant_id);
-                if (n) {
-                    v.name = n;
-                    names[v.plant_id] = n;
-                }
-            }, PARALLEL);
-            GM_setValue(KEY_PLANT_NAMES, names);
-        }
-
         return { visits, username, scanned: known.length };
-
-        function all_phase2_total() { return 0; } // progress accounting; phase2 is short
     }
 
     const NO_TZ = 'Europe/Oslo';
