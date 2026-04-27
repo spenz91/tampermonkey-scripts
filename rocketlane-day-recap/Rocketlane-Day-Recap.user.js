@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.0
+// @version      3.1
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -60,6 +60,34 @@
             const u = localStorage.getItem('pang.login.username');
             if (u) GM_setValue(KEY_USERNAME, JSON.parse(u));
         } catch (e) { console.warn('Day Recap: sync failed', e); }
+        // If we were opened by Rocketlane as a sync helper, close ourselves.
+        if (window.name === 'rl_pang_sync') {
+            setTimeout(() => { try { window.close(); } catch {} }, 250);
+        }
+    }
+
+    // From Rocketlane: open pang in a tiny popup to trigger syncFromPang inside it.
+    function autoSyncFromPang(timeoutMs = 10000) {
+        return new Promise(resolve => {
+            const before = GM_getValue(KEY_KNOWN_PLANTS, []).length;
+            const w = window.open(
+                'http://tools.iwmac.local/pang.qxs',
+                'rl_pang_sync',
+                'width=420,height=300,left=0,top=0'
+            );
+            if (!w) { resolve(false); return; }
+            const start = Date.now();
+            const tick = setInterval(() => {
+                const now = GM_getValue(KEY_KNOWN_PLANTS, []).length;
+                const grew = now > before;
+                const timedOut = Date.now() - start > timeoutMs;
+                if (grew || timedOut) {
+                    clearInterval(tick);
+                    try { w.close(); } catch {}
+                    resolve(grew);
+                }
+            }, 250);
+        });
     }
 
     // ---------- Rocketlane: panel ----------
@@ -233,6 +261,7 @@
             <div class="controls">
                 <input type="date" value="${todayISO()}">
                 <button data-action="search">Search</button>
+                <button data-action="resync" title="Re-sync recent plant list from pang">↻</button>
             </div>
             <div class="progress"><div style="width:0%"></div></div>
             <div class="results"></div>
@@ -242,17 +271,32 @@
 
         const dateInput = panel.querySelector('input[type=date]');
         const searchBtn = panel.querySelector('[data-action=search]');
+        const resyncBtn = panel.querySelector('[data-action=resync]');
         const list      = panel.querySelector('.results');
         const totalEl   = panel.querySelector('.total');
         const progress  = panel.querySelector('.progress > div');
 
+        const ensureKnown = async () => {
+            const known = GM_getValue(KEY_KNOWN_PLANTS, []);
+            if (known.length > 0) return true;
+            list.innerHTML = '<div class="empty">Fetching your recent plants from pang…<br><small>(briefly opens pang in a small window)</small></div>';
+            const ok = await autoSyncFromPang();
+            return ok;
+        };
+
         const run = async () => {
             searchBtn.disabled = true;
-            list.innerHTML = '<div class="empty">Querying pang…</div>';
+            resyncBtn.disabled = true;
             totalEl.textContent = '';
             progress.style.width = '0%';
-            const iso = dateInput.value;
             try {
+                const ok = await ensureKnown();
+                if (!ok) {
+                    list.innerHTML = '<div class="empty">Could not fetch plant list. Make sure pop-ups are allowed for kiona.rocketlane.com, or open <a href="http://tools.iwmac.local/pang.qxs" target="_blank">pang</a> manually.</div>';
+                    return;
+                }
+                list.innerHTML = '<div class="empty">Querying pang…</div>';
+                const iso = dateInput.value;
                 const { visits, username, scanned } = await loadVisitsForDate(iso, (done, total) => {
                     progress.style.width = Math.round(done / total * 100) + '%';
                 });
@@ -263,11 +307,21 @@
                     `<span>${visits.length} plant${visits.length === 1 ? '' : 's'} of ${scanned} scanned</span>`;
             } finally {
                 searchBtn.disabled = false;
+                resyncBtn.disabled = false;
                 setTimeout(() => { progress.style.width = '0%'; }, 800);
             }
         };
 
+        const resync = async () => {
+            resyncBtn.disabled = true;
+            searchBtn.disabled = true;
+            list.innerHTML = '<div class="empty">Re-syncing recent plants from pang…</div>';
+            await autoSyncFromPang();
+            await run();
+        };
+
         searchBtn.addEventListener('click', run);
+        resyncBtn.addEventListener('click', resync);
         dateInput.addEventListener('change', run);
         panel.querySelector('[data-action=close]').addEventListener('click', () => panel.remove());
         run();
