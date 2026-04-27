@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.2
+// @version      3.3
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -48,8 +48,13 @@
         }
     }
 
-    // ---------- Pang page: pull recent list + username ----------
+    // ---------- Pang page: pull recent list + username + plant names ----------
     function syncFromPang() {
+        const finish = () => {
+            if (window.name === 'rl_pang_sync') {
+                setTimeout(() => { try { window.close(); } catch {} }, 250);
+            }
+        };
         try {
             const raw = localStorage.getItem('pang.recent');
             if (raw) {
@@ -61,16 +66,40 @@
             const u = localStorage.getItem('pang.login.username');
             if (u) GM_setValue(KEY_USERNAME, JSON.parse(u));
         } catch (e) { console.warn('Day Recap: sync failed', e); }
-        // If we were opened by Rocketlane as a sync helper, close ourselves.
-        if (window.name === 'rl_pang_sync') {
-            setTimeout(() => { try { window.close(); } catch {} }, 250);
-        }
+
+        // Wait for pang's plants_table to populate, then harvest plant_id → name.
+        let attempts = 0;
+        const tryHarvest = () => {
+            attempts++;
+            try {
+                const bodys = window.module_plants?.plants_table?.tableData?.bodys;
+                if (Array.isArray(bodys) && bodys.length) {
+                    const names = GM_getValue(KEY_PLANT_NAMES, {});
+                    let added = 0;
+                    for (const row of bodys) {
+                        const u = row?.user;
+                        if (!u || !u.plant_id || !u.name) continue;
+                        if (names[u.plant_id] !== u.name) {
+                            names[u.plant_id] = u.name;
+                            added++;
+                        }
+                    }
+                    if (added) GM_setValue(KEY_PLANT_NAMES, names);
+                    finish();
+                    return;
+                }
+            } catch {}
+            if (attempts < 40) setTimeout(tryHarvest, 250); // up to ~10s
+            else finish();
+        };
+        tryHarvest();
     }
 
     // From Rocketlane: open pang in a tiny popup to trigger syncFromPang inside it.
-    function autoSyncFromPang(timeoutMs = 10000) {
+    // The popup closes itself once it has harvested both the recent list and plant names.
+    function autoSyncFromPang(timeoutMs = 15000) {
         return new Promise(resolve => {
-            const before = GM_getValue(KEY_KNOWN_PLANTS, []).length;
+            const beforeKnown = GM_getValue(KEY_KNOWN_PLANTS, []).length;
             const w = window.open(
                 'http://tools.iwmac.local/pang.qxs',
                 'rl_pang_sync',
@@ -79,12 +108,12 @@
             if (!w) { resolve(false); return; }
             const start = Date.now();
             const tick = setInterval(() => {
-                const now = GM_getValue(KEY_KNOWN_PLANTS, []).length;
-                const grew = now > before;
+                const closed = (() => { try { return w.closed; } catch { return false; } })();
                 const timedOut = Date.now() - start > timeoutMs;
-                if (grew || timedOut) {
+                if (closed || timedOut) {
                     clearInterval(tick);
                     try { w.close(); } catch {}
+                    const grew = GM_getValue(KEY_KNOWN_PLANTS, []).length > beforeKnown;
                     resolve(grew);
                 }
             }, 250);
