@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.5
+// @version      3.6
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -13,6 +13,8 @@
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @connect      tools.iwmac.local
+// @connect      *.plants.iwmac.local
+// @connect      plants.iwmac.local
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -140,6 +142,32 @@
         });
     }
 
+    // Fallback: fetch the plant admin page directly and pull the name out of <h1>/<title>.
+    // This is the same source recordPlantName() uses when you actually open a plant in the browser,
+    // just done via GM_xmlhttpRequest (so the user's session/auth is reused). No SQL involved.
+    function gmFetchPlantNameFromAdmin(plant_id) {
+        return new Promise(resolve => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `http://${plant_id}.plants.iwmac.local:8080/`,
+                timeout: 8000,
+                onload: r => {
+                    try {
+                        const html = r.responseText || '';
+                        const h1 = html.match(/<h1[^>]*>\s*([^<]+?)\s*<\/h1>/i)?.[1];
+                        const ti = html.match(/<title[^>]*>\s*([^<]+?)\s*<\/title>/i)?.[1];
+                        // Plant admin pages typically use the plant name as the H1 and as the title.
+                        // Strip a leading "Plant: " / "Plant - " prefix if the title is used.
+                        const raw = (h1 || ti || '').replace(/^\s*Plant\s*[:\-]\s*/i, '').trim();
+                        resolve(raw);
+                    } catch { resolve(''); }
+                },
+                onerror: () => resolve(''),
+                ontimeout: () => resolve(''),
+            });
+        });
+    }
+
     // Run f(item) over items with limited parallelism. Calls onProgress(done, total).
     async function pMap(items, f, parallel, onProgress) {
         const results = new Array(items.length);
@@ -201,6 +229,21 @@
         }, PARALLEL, onProgress);
 
         const visits = all.filter(Boolean).sort((a, b) => a.first_ts - b.first_ts);
+
+        // Fill in any still-missing names by hitting the plant admin page directly.
+        // Only done for plants we actually have a visit for, so this is cheap.
+        const needNames = visits.filter(v => !v.name);
+        if (needNames.length) {
+            await pMap(needNames, async (v) => {
+                const n = await gmFetchPlantNameFromAdmin(v.plant_id);
+                if (n) {
+                    v.name = n;
+                    names[v.plant_id] = n;
+                }
+            }, PARALLEL);
+            GM_setValue(KEY_PLANT_NAMES, names);
+        }
+
         return { visits, username, scanned: known.length };
     }
 
