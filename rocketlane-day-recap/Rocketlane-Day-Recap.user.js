@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.1
+// @version      3.2
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -13,6 +13,7 @@
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @connect      tools.iwmac.local
+// @connect      toolbox.iwmac.local
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -111,6 +112,30 @@
         });
     }
 
+    function gmFetchPlantName(plant_id) {
+        return new Promise(resolve => {
+            const params = new URLSearchParams();
+            params.append('plant_id', String(plant_id));
+            params.append('sql_command', "SELECT value FROM iw_plant_server3.iw_sys_plant_settings WHERE setting='plant_name' LIMIT 1");
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: 'http://toolbox.iwmac.local:8505/plant-sql/',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                data: params.toString(),
+                onload: r => {
+                    try {
+                        const d = JSON.parse(r.responseText);
+                        const row = d.results?.[0]?.data?.[0];
+                        resolve(row?.value || '');
+                    } catch { resolve(''); }
+                },
+                onerror: () => resolve(''),
+                ontimeout: () => resolve(''),
+                timeout: 10000,
+            });
+        });
+    }
+
     // Run f(item) over items with limited parallelism. Calls onProgress(done, total).
     async function pMap(items, f, parallel, onProgress) {
         const results = new Array(items.length);
@@ -141,9 +166,9 @@
     }
 
     function todayISO() {
-        const d = new Date();
-        const tz = d.getTimezoneOffset() * 60000;
-        return new Date(d - tz).toISOString().slice(0, 10);
+        // Today's date in Norway (Europe/Oslo)
+        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: NO_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+        return parts; // en-CA emits YYYY-MM-DD
     }
 
     async function loadVisitsForDate(isoDate, onProgress) {
@@ -153,15 +178,14 @@
 
         if (known.length === 0) return { visits: [], username, scanned: 0 };
 
+        // Phase 1: history fan-out (90% of progress bar)
         const all = await pMap(known, async (pid) => {
             const entries = await gmFetchHistory(pid);
-            // Filter to user + date
             const matches = entries.filter(e => {
                 if (pangDateToISODate(e.date) !== isoDate) return false;
                 return normalizeUser(e.user) === username;
             });
             if (matches.length === 0) return null;
-            // Use earliest action that day for the "time" displayed
             matches.sort((a, b) => tsFromPangDate(a.date) - tsFromPangDate(b.date));
             const actions = [...new Set(matches.map(m => m.action))];
             return {
@@ -171,14 +195,40 @@
                 actions,
                 count: matches.length,
             };
-        }, PARALLEL, onProgress);
+        }, PARALLEL, (d, t) => onProgress?.(d, t + (all_phase2_total())));
 
         const visits = all.filter(Boolean).sort((a, b) => a.first_ts - b.first_ts);
+
+        // Phase 2: fetch missing names for matched plants only
+        const needNames = visits.filter(v => !v.name);
+        if (needNames.length) {
+            await pMap(needNames, async (v) => {
+                const n = await gmFetchPlantName(v.plant_id);
+                if (n) {
+                    v.name = n;
+                    names[v.plant_id] = n;
+                }
+            }, PARALLEL);
+            GM_setValue(KEY_PLANT_NAMES, names);
+        }
+
         return { visits, username, scanned: known.length };
+
+        function all_phase2_total() { return 0; } // progress accounting; phase2 is short
     }
 
+    const NO_TZ = 'Europe/Oslo';
+    const noTimeFmt = new Intl.DateTimeFormat('nb-NO', { timeZone: NO_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+    const noDateFmt = new Intl.DateTimeFormat('nb-NO', { timeZone: NO_TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
+
     function tsToLocalTime(ts) {
-        return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return noTimeFmt.format(new Date(ts));
+    }
+    function isoToNorwegianDate(iso) {
+        // iso = "YYYY-MM-DD" — display as "DD.MM.YYYY"
+        if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+        const [y, m, d] = iso.split('-');
+        return `${d}.${m}.${y}`;
     }
 
     function escapeHtml(s) {
@@ -303,7 +353,7 @@
                 progress.style.width = '100%';
                 renderVisits(list, visits, iso, scanned);
                 totalEl.innerHTML =
-                    `<span>user: ${escapeHtml(username)}</span>` +
+                    `<span>${escapeHtml(username)} · ${isoToNorwegianDate(iso)}</span>` +
                     `<span>${visits.length} plant${visits.length === 1 ? '' : 's'} of ${scanned} scanned</span>`;
             } finally {
                 searchBtn.disabled = false;
@@ -335,7 +385,7 @@
             return;
         }
         if (visits.length === 0) {
-            list.innerHTML = `<div class="empty">Nothing logged for ${isoDate} across ${scanned} known plants.</div>`;
+            list.innerHTML = `<div class="empty">Nothing logged for ${isoToNorwegianDate(isoDate)} across ${scanned} known plants.</div>`;
             return;
         }
         visits.forEach(v => {
