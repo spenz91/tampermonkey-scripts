@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.4
+// @version      3.5
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -376,7 +376,7 @@
             return;
         }
         visits.forEach(v => {
-            const url = `http://${v.plant_id}.plants.iwmac.local:8080/`;
+            const url = `http://tools.iwmac.local/pang.qxs?plant_id=${encodeURIComponent(v.plant_id)}`;
             const div = document.createElement('div');
             div.className = 'row';
             div.innerHTML = `
