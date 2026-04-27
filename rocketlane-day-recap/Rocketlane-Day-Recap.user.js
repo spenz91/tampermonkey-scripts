@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      2.0
+// @version      2.1
 // @description  Records every IWMAC plant page you visit, then shows them per day on Rocketlane My Timesheet.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -18,20 +18,10 @@
 
     const STORAGE_KEY = 'visits';
     const MAX_VISITS = 5000;
+    const PANEL_ID = 'rl-day-recap-panel';
+    const BTN_ID = 'rl-day-recap-fab';
 
     const host = location.hostname;
-
-    // ---------- Plant page: record visit ----------
-    if (host.endsWith('.plants.iwmac.local')) {
-        recordVisit();
-        return;
-    }
-
-    // ---------- Rocketlane: show panel ----------
-    if (host === 'kiona.rocketlane.com') {
-        initRocketlane();
-        return;
-    }
 
     function recordVisit() {
         const m = host.match(/^(\d+)\.plants\.iwmac\.local$/);
@@ -73,9 +63,6 @@
         });
         observer.observe(document.documentElement, { childList: true, subtree: true });
     }
-
-    const PANEL_ID = 'rl-day-recap-panel';
-    const BTN_ID = 'rl-day-recap-fab';
 
     const css = `
         #${BTN_ID} {
@@ -229,5 +216,12 @@
             else buildPanel();
         });
         document.body.appendChild(btn);
+    }
+
+    // ---------- Dispatch (after all consts are evaluated) ----------
+    if (host.endsWith('.plants.iwmac.local')) {
+        recordVisit();
+    } else if (host === 'kiona.rocketlane.com') {
+        initRocketlane();
     }
 })();
