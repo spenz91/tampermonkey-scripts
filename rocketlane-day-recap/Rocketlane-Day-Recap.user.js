@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.10
+// @version      3.11
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -22,7 +22,7 @@
     const KEY_KNOWN_PLANTS = 'known_plants';   // [plant_id, ...]
     const KEY_PLANT_NAMES  = 'plant_names';    // { plant_id: name }
     const KEY_USERNAME     = 'pang_username';
-    const KEY_NAMES_PURGED = 'plant_names_purged_v39'; // bump to re-run cleanup of v3.6 junk like "Forbidden"
+    const KEY_NAMES_PURGED = 'plant_names_purged_v311'; // bump to re-run cleanup; v311 evicts IWMAC default-template names
     const PANEL_ID = 'rl-day-recap-panel';
     const BTN_ID   = 'rl-day-recap-fab';
     const PARALLEL = 8;
@@ -32,12 +32,22 @@
     // Names that v3.6 may have scraped from plant-admin error pages. None of these
     // are real IWMAC plant names, so we treat them as "no name captured yet".
     const BAD_NAME_RE = /^(forbidden|unauthorized|access denied|not found|bad gateway|service unavailable|gateway timeout|401|403|404|5\d\d|error|index of|nginx|apache|iis|welcome to)/i;
+    // Generic IWMAC template defaults that some plants' settings DB still carries (project_name,
+    // server_name, plant_server_name) when no real plant name was set. These slipped into the
+    // cache from an old SQL fallback. They are NOT real plant names — evict them.
+    const BAD_NAME_EXACT = new Set([
+        'iwmac supermarket',
+        'iwmac operation center',
+        'iwmac plant server',
+        'iwmac',
+    ]);
     function looksLikeBadName(s) {
         if (typeof s !== 'string') return true;
         const t = s.trim();
         if (!t) return true;
         if (t.length > 120) return true; // real names are short
         if (BAD_NAME_RE.test(t)) return true;
+        if (BAD_NAME_EXACT.has(t.toLowerCase())) return true;
         return false;
     }
 
