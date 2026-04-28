@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.12
+// @version      3.13
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -389,6 +389,16 @@
             return ok;
         };
 
+        // Refresh names on visits in-place from current cache (after a resync)
+        const refillNames = (visits) => {
+            const names = GM_getValue(KEY_PLANT_NAMES, {});
+            for (const v of visits) {
+                if (!v.name && names[v.plant_id]) v.name = names[v.plant_id];
+            }
+        };
+
+        let autoResyncDone = false;
+
         const run = async () => {
             searchBtn.disabled = true;
             resyncBtn.disabled = true;
@@ -406,10 +416,22 @@
                     progress.style.width = Math.round(done / total * 100) + '%';
                 });
                 progress.style.width = '100%';
+
+                // If any visit has no plant name AND we haven't already auto-resynced this panel,
+                // run a background sync (popup), then re-fill names and re-render.
+                const anyMissing = visits.some(v => !v.name);
+                if (anyMissing && !autoResyncDone) {
+                    autoResyncDone = true;
+                    list.innerHTML = '<div class="empty">Some plants missing names — re-syncing from pang…</div>';
+                    await autoSyncFromPang();
+                    refillNames(visits);
+                }
+
                 renderVisits(list, visits, iso, scanned);
+                const stillMissing = visits.filter(v => !v.name).length;
                 totalEl.innerHTML =
                     `<span>${escapeHtml(username)} · ${isoToNorwegianDate(iso)}</span>` +
-                    `<span>${visits.length} plant${visits.length === 1 ? '' : 's'} of ${scanned} scanned</span>`;
+                    `<span>${visits.length} plant${visits.length === 1 ? '' : 's'} of ${scanned} scanned${stillMissing ? ` · ${stillMissing} unnamed` : ''}</span>`;
             } finally {
                 searchBtn.disabled = false;
                 resyncBtn.disabled = false;
@@ -479,6 +501,27 @@
             if (!document.getElementById(BTN_ID) && document.body) buildButton();
         });
         observer.observe(document.documentElement, { childList: true, subtree: true });
+        // Debug helper. From DevTools console: window.__rlRecap.dump('3168')
+        try {
+            (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window).__rlRecap = {
+                dump(plant_id) {
+                    const names = GM_getValue(KEY_PLANT_NAMES, {});
+                    const known = GM_getValue(KEY_KNOWN_PLANTS, []);
+                    const out = {
+                        username: GM_getValue(KEY_USERNAME, '(none)'),
+                        known_count: known.length,
+                        names_count: Object.keys(names).length,
+                    };
+                    if (plant_id) {
+                        const id = String(plant_id);
+                        out.plant = { id, in_known: known.includes(id), name: names[id] || null };
+                    }
+                    return out;
+                },
+                resync: () => autoSyncFromPang(),
+                clearNames: () => { GM_setValue(KEY_PLANT_NAMES, {}); return 'cleared'; },
+            };
+        } catch (e) {}
     }
 
     // ---------- Dispatch ----------
