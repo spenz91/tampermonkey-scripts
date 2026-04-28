@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      4.5
+// @version      4.7
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -28,7 +28,7 @@
     const KEY_LAST_HARVEST = 'last_harvest_ts'; // ms timestamp of most recent successful harvest write
     const KEY_HARVEST_DONE = 'harvest_done_ts'; // set when syncFromPang considers itself complete
     const KEY_NAME_LOOKUP_IDS = 'name_lookup_ids'; // [plant_id, ...] requested by Rocketlane for a targeted pang sync
-    const SCRIPT_VERSION   = '4.5';
+    const SCRIPT_VERSION   = '4.7';
     const LOG = (...args) => console.log('[Day Recap v' + SCRIPT_VERSION + ']', ...args);
     const KEY_NAMES_PURGED = 'plant_names_purged_v44'; // bump to re-run cleanup; v44 evicts "Ukjent anlegg" titles
     const PANEL_ID = 'rl-day-recap-panel';
@@ -662,6 +662,25 @@
         });
     }
 
+    function isRocketlaneTimesheetsPage() {
+        return location.origin === 'https://kiona.rocketlane.com' &&
+            (location.pathname === '/timesheets' || location.pathname.startsWith('/timesheets/'));
+    }
+
+    function removeRocketlaneUi() {
+        document.getElementById(BTN_ID)?.remove();
+        document.getElementById(PANEL_ID)?.remove();
+    }
+
+    function syncRocketlaneUi() {
+        if (!isRocketlaneTimesheetsPage()) {
+            removeRocketlaneUi();
+            return;
+        }
+        injectStyle();
+        buildButton();
+    }
+
     function buildButton() {
         if (document.getElementById(BTN_ID)) return;
         const btn = document.createElement('button');
@@ -676,10 +695,9 @@
     }
 
     function initRocketlane() {
-        injectStyle();
-        buildButton();
+        syncRocketlaneUi();
         const observer = new MutationObserver(() => {
-            if (!document.getElementById(BTN_ID) && document.body) buildButton();
+            if (document.body) syncRocketlaneUi();
         });
         observer.observe(document.documentElement, { childList: true, subtree: true });
         // Debug helper. From DevTools console: window.__rlRecap.dump('3168')

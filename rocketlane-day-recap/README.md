@@ -19,7 +19,7 @@ Rocketlane's My Timesheet gets a small button that just opens pang with the date
 By default, only your 50 recent plants are scanned (fast, ~2-3 sec). Tick **Scan all plants** to scan the full IWMAC inventory (~7600 plants, ~30 sec) for older visits.
 
 ### From Rocketlane
-1. On `kiona.rocketlane.com/timesheets/...` click 🏭 **Day Recap**
+1. On any `https://kiona.rocketlane.com/timesheets/...` page, click 🏭 **Day Recap**
 2. Pick a date → **Open on pang ↗** opens pang in a new tab with the panel auto-populated
 
 ## How it works
