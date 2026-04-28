@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.6
+// @version      3.10
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -13,8 +13,6 @@
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @connect      tools.iwmac.local
-// @connect      *.plants.iwmac.local
-// @connect      plants.iwmac.local
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -24,11 +22,41 @@
     const KEY_KNOWN_PLANTS = 'known_plants';   // [plant_id, ...]
     const KEY_PLANT_NAMES  = 'plant_names';    // { plant_id: name }
     const KEY_USERNAME     = 'pang_username';
+    const KEY_NAMES_PURGED = 'plant_names_purged_v39'; // bump to re-run cleanup of v3.6 junk like "Forbidden"
     const PANEL_ID = 'rl-day-recap-panel';
     const BTN_ID   = 'rl-day-recap-fab';
     const PARALLEL = 8;
 
     const host = location.hostname;
+
+    // Names that v3.6 may have scraped from plant-admin error pages. None of these
+    // are real IWMAC plant names, so we treat them as "no name captured yet".
+    const BAD_NAME_RE = /^(forbidden|unauthorized|access denied|not found|bad gateway|service unavailable|gateway timeout|401|403|404|5\d\d|error|index of|nginx|apache|iis|welcome to)/i;
+    function looksLikeBadName(s) {
+        if (typeof s !== 'string') return true;
+        const t = s.trim();
+        if (!t) return true;
+        if (t.length > 120) return true; // real names are short
+        if (BAD_NAME_RE.test(t)) return true;
+        return false;
+    }
+
+    // One-time cleanup: drop any names that v3.6's admin-page scraper poisoned the cache with.
+    function purgeBadNamesOnce() {
+        if (GM_getValue(KEY_NAMES_PURGED, false)) return;
+        const names = GM_getValue(KEY_PLANT_NAMES, {});
+        let removed = 0;
+        for (const id of Object.keys(names)) {
+            if (looksLikeBadName(names[id])) {
+                delete names[id];
+                removed++;
+            }
+        }
+        GM_setValue(KEY_PLANT_NAMES, names);
+        GM_setValue(KEY_NAMES_PURGED, true);
+        if (removed) console.log(`Day Recap: purged ${removed} junk plant names from cache`);
+    }
+    purgeBadNamesOnce();
 
     // ---------- Plant page: capture name ----------
     function recordPlantName() {
@@ -37,7 +65,9 @@
         const plant_id = m[1];
         const name = (document.querySelector('h1')?.textContent || document.title || '').trim();
         const names = GM_getValue(KEY_PLANT_NAMES, {});
-        if (name && names[plant_id] !== name) {
+        // Only persist the name if it looks like a real plant name. Plant-admin pages often
+        // serve "Forbidden" / login error pages whose <title> we do NOT want in the cache.
+        if (name && !looksLikeBadName(name) && names[plant_id] !== name) {
             names[plant_id] = name;
             GM_setValue(KEY_PLANT_NAMES, names);
         }
@@ -68,20 +98,25 @@
             if (u) GM_setValue(KEY_USERNAME, JSON.parse(u));
         } catch (e) { console.warn('Day Recap: sync failed', e); }
 
-        // Wait for pang's plants_table to populate, then harvest plant_id → name.
+        // Wait for pang's full plant collection to populate, then harvest every plant_id → name.
+        // module_plants.coll.data is the authoritative list (populated from the 'all_plants'
+        // websocket event). It contains ALL plants pang knows about, not just whatever rows are
+        // currently rendered in plants_table (which is filtered by the default search/active flag).
         let attempts = 0;
         const tryHarvest = () => {
             attempts++;
             try {
+                const collData = window.module_plants?.coll?.data;
                 const bodys = window.module_plants?.plants_table?.tableData?.bodys;
-                if (Array.isArray(bodys) && bodys.length) {
-                    const names = GM_getValue(KEY_PLANT_NAMES, {});
-                    let added = 0;
-                    for (const row of bodys) {
-                        const u = row?.user;
-                        if (!u || !u.plant_id || !u.name) continue;
-                        if (names[u.plant_id] !== u.name) {
-                            names[u.plant_id] = u.name;
+                const names = GM_getValue(KEY_PLANT_NAMES, {});
+                let added = 0;
+
+                if (Array.isArray(collData) && collData.length) {
+                    for (const p of collData) {
+                        if (!p || !p.plant_id || !p.name) continue;
+                        const id = String(p.plant_id);
+                        if (names[id] !== p.name) {
+                            names[id] = p.name;
                             added++;
                         }
                     }
@@ -89,8 +124,24 @@
                     finish();
                     return;
                 }
+
+                // Fallback: rendered table only (older pang or before the websocket pushed all_plants)
+                if (Array.isArray(bodys) && bodys.length) {
+                    for (const row of bodys) {
+                        const u = row?.user;
+                        if (!u || !u.plant_id || !u.name) continue;
+                        const id = String(u.plant_id);
+                        if (names[id] !== u.name) {
+                            names[id] = u.name;
+                            added++;
+                        }
+                    }
+                    if (added) GM_setValue(KEY_PLANT_NAMES, names);
+                    // don't finish yet if coll might still be loading — try a couple more times
+                    if (attempts > 8) { finish(); return; }
+                }
             } catch {}
-            if (attempts < 40) setTimeout(tryHarvest, 250); // up to ~10s
+            if (attempts < 60) setTimeout(tryHarvest, 250); // up to ~15s, gives websocket time to deliver all_plants
             else finish();
         };
         tryHarvest();
@@ -138,32 +189,6 @@
                 onerror: () => resolve([]),
                 ontimeout: () => resolve([]),
                 timeout: 15000,
-            });
-        });
-    }
-
-    // Fallback: fetch the plant admin page directly and pull the name out of <h1>/<title>.
-    // This is the same source recordPlantName() uses when you actually open a plant in the browser,
-    // just done via GM_xmlhttpRequest (so the user's session/auth is reused). No SQL involved.
-    function gmFetchPlantNameFromAdmin(plant_id) {
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `http://${plant_id}.plants.iwmac.local:8080/`,
-                timeout: 8000,
-                onload: r => {
-                    try {
-                        const html = r.responseText || '';
-                        const h1 = html.match(/<h1[^>]*>\s*([^<]+?)\s*<\/h1>/i)?.[1];
-                        const ti = html.match(/<title[^>]*>\s*([^<]+?)\s*<\/title>/i)?.[1];
-                        // Plant admin pages typically use the plant name as the H1 and as the title.
-                        // Strip a leading "Plant: " / "Plant - " prefix if the title is used.
-                        const raw = (h1 || ti || '').replace(/^\s*Plant\s*[:\-]\s*/i, '').trim();
-                        resolve(raw);
-                    } catch { resolve(''); }
-                },
-                onerror: () => resolve(''),
-                ontimeout: () => resolve(''),
             });
         });
     }
@@ -229,20 +254,6 @@
         }, PARALLEL, onProgress);
 
         const visits = all.filter(Boolean).sort((a, b) => a.first_ts - b.first_ts);
-
-        // Fill in any still-missing names by hitting the plant admin page directly.
-        // Only done for plants we actually have a visit for, so this is cheap.
-        const needNames = visits.filter(v => !v.name);
-        if (needNames.length) {
-            await pMap(needNames, async (v) => {
-                const n = await gmFetchPlantNameFromAdmin(v.plant_id);
-                if (n) {
-                    v.name = n;
-                    names[v.plant_id] = n;
-                }
-            }, PARALLEL);
-            GM_setValue(KEY_PLANT_NAMES, names);
-        }
 
         return { visits, username, scanned: known.length };
     }
