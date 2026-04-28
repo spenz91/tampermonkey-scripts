@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.14
+// @version      3.15
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -25,6 +25,8 @@
     const KEY_USERNAME     = 'pang_username';
     const KEY_LAST_HARVEST = 'last_harvest_ts'; // ms timestamp of most recent successful harvest write
     const KEY_HARVEST_DONE = 'harvest_done_ts'; // set when syncFromPang considers itself complete
+    const SCRIPT_VERSION   = '3.15';
+    const LOG = (...args) => console.log('[Day Recap v' + SCRIPT_VERSION + ']', ...args);
     const KEY_NAMES_PURGED = 'plant_names_purged_v311'; // bump to re-run cleanup; v311 evicts IWMAC default-template names
     const PANEL_ID = 'rl-day-recap-panel';
     const BTN_ID   = 'rl-day-recap-fab';
@@ -94,8 +96,10 @@
 
     // ---------- Pang page: pull recent list + username + plant names ----------
     function syncFromPang() {
+        LOG('syncFromPang() called on', location.href);
         const isSyncTab = window.name === 'rl_pang_sync' || (location.hash && location.hash.includes('rl-sync'));
         const finish = () => {
+            LOG('finish() — marking harvest done. names_count:', Object.keys(GM_getValue(KEY_PLANT_NAMES, {})).length);
             // Always signal harvest completion for any Rocketlane caller polling on this key.
             GM_setValue(KEY_HARVEST_DONE, Date.now());
             if (isSyncTab) {
@@ -138,9 +142,21 @@
             if (added) {
                 GM_setValue(KEY_PLANT_NAMES, names);
                 GM_setValue(KEY_LAST_HARVEST, Date.now());
+                LOG('harvestNow added', added, 'names. coll_len=', coll?.length, 'bodys_len=', bodys?.length, 'total cached=', Object.keys(names).length);
+            } else {
+                LOG('harvestNow: 0 added. coll_len=', coll?.length, 'bodys_len=', bodys?.length, 'cached=', Object.keys(names).length);
             }
             return added;
         };
+
+        // Expose for manual triggering from DevTools (any pang tab).
+        try {
+            (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window).__rlRecap = {
+                version: SCRIPT_VERSION,
+                harvest: () => harvestNow(),
+                pangColl: () => ({ len: window.module_plants?.coll?.data?.length, sample: window.module_plants?.coll?.data?.[0]?.name }),
+            };
+        } catch {}
 
         let attempts = 0;
         let lastLen = -1;
@@ -532,13 +548,17 @@
         // Debug helper. From DevTools console: window.__rlRecap.dump('3168')
         try {
             (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window).__rlRecap = {
+                version: SCRIPT_VERSION,
                 dump(plant_id) {
                     const names = GM_getValue(KEY_PLANT_NAMES, {});
                     const known = GM_getValue(KEY_KNOWN_PLANTS, []);
                     const out = {
+                        version: SCRIPT_VERSION,
                         username: GM_getValue(KEY_USERNAME, '(none)'),
                         known_count: known.length,
                         names_count: Object.keys(names).length,
+                        last_harvest: new Date(GM_getValue(KEY_LAST_HARVEST, 0)).toISOString(),
+                        last_done: new Date(GM_getValue(KEY_HARVEST_DONE, 0)).toISOString(),
                     };
                     if (plant_id) {
                         const id = String(plant_id);
