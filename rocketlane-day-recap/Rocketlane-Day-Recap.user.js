@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.11
+// @version      3.12
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -108,58 +108,62 @@
             if (u) GM_setValue(KEY_USERNAME, JSON.parse(u));
         } catch (e) { console.warn('Day Recap: sync failed', e); }
 
-        // Wait for pang's full plant collection to populate, then harvest every plant_id → name.
-        // module_plants.coll.data is the authoritative list (populated from the 'all_plants'
-        // websocket event). It contains ALL plants pang knows about, not just whatever rows are
-        // currently rendered in plants_table (which is filtered by the default search/active flag).
+        // Harvest plant_id → name from pang.
+        // module_plants.coll.data holds the authoritative full plant inventory (~7600 plants),
+        // populated by a websocket all_plants event. The collection grows as plants stream in,
+        // so we must wait until either:
+        //   (a) the length stabilises (3 consecutive ticks with no growth), OR
+        //   (b) the length is clearly "full" (>1000 entries — far more than the rendered top-50)
+        // before declaring sync done. The previous version exited on first sight which often
+        // captured only the initial 50 rendered rows.
+        const harvestNow = () => {
+            const coll = window.module_plants?.coll?.data;
+            const bodys = window.module_plants?.plants_table?.tableData?.bodys;
+            const names = GM_getValue(KEY_PLANT_NAMES, {});
+            let added = 0;
+            const consume = (id, name) => {
+                if (!id || !name) return;
+                if (looksLikeBadName(name)) return;
+                const sid = String(id);
+                if (names[sid] !== name) { names[sid] = name; added++; }
+            };
+            if (Array.isArray(coll)) for (const p of coll) consume(p?.plant_id, p?.name);
+            if (Array.isArray(bodys)) for (const r of bodys) consume(r?.user?.plant_id, r?.user?.name);
+            if (added) GM_setValue(KEY_PLANT_NAMES, names);
+            return added;
+        };
+
         let attempts = 0;
+        let lastLen = -1;
+        let stableTicks = 0;
         const tryHarvest = () => {
             attempts++;
             try {
-                const collData = window.module_plants?.coll?.data;
-                const bodys = window.module_plants?.plants_table?.tableData?.bodys;
-                const names = GM_getValue(KEY_PLANT_NAMES, {});
-                let added = 0;
+                const len = window.module_plants?.coll?.data?.length || 0;
+                harvestNow(); // always merge whatever's there now
 
-                if (Array.isArray(collData) && collData.length) {
-                    for (const p of collData) {
-                        if (!p || !p.plant_id || !p.name) continue;
-                        const id = String(p.plant_id);
-                        if (names[id] !== p.name) {
-                            names[id] = p.name;
-                            added++;
-                        }
-                    }
-                    if (added) GM_setValue(KEY_PLANT_NAMES, names);
-                    finish();
-                    return;
-                }
-
-                // Fallback: rendered table only (older pang or before the websocket pushed all_plants)
-                if (Array.isArray(bodys) && bodys.length) {
-                    for (const row of bodys) {
-                        const u = row?.user;
-                        if (!u || !u.plant_id || !u.name) continue;
-                        const id = String(u.plant_id);
-                        if (names[id] !== u.name) {
-                            names[id] = u.name;
-                            added++;
-                        }
-                    }
-                    if (added) GM_setValue(KEY_PLANT_NAMES, names);
-                    // don't finish yet if coll might still be loading — try a couple more times
-                    if (attempts > 8) { finish(); return; }
+                if (len > 0) {
+                    if (len === lastLen) stableTicks++;
+                    else { stableTicks = 0; lastLen = len; }
+                    // Done once stable for ~750 ms OR clearly fully loaded
+                    if (stableTicks >= 3 || len > 1000) { finish(); return; }
                 }
             } catch {}
-            if (attempts < 60) setTimeout(tryHarvest, 250); // up to ~15s, gives websocket time to deliver all_plants
+            if (attempts < 80) setTimeout(tryHarvest, 250); // up to ~20s
             else finish();
         };
         tryHarvest();
+
+        // On the user's regular pang tab (not our hidden sync popup), keep watching for changes
+        // so newly added plants get into the cache without manual ↻ clicks.
+        if (window.name !== 'rl_pang_sync') {
+            setInterval(harvestNow, 30000);
+        }
     }
 
     // From Rocketlane: open pang in a tiny popup to trigger syncFromPang inside it.
     // The popup closes itself once it has harvested both the recent list and plant names.
-    function autoSyncFromPang(timeoutMs = 15000) {
+    function autoSyncFromPang(timeoutMs = 25000) {
         return new Promise(resolve => {
             const beforeKnown = GM_getValue(KEY_KNOWN_PLANTS, []).length;
             const w = window.open(
