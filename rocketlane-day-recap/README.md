@@ -1,6 +1,8 @@
 # Rocketlane Day Recap
 
-On Rocketlane My Timesheet, adds a 🏭 **Plants visited** button — pick a date and see every IWMAC plant you opened in pang on that day (with timestamp and which actions you performed: `direct_plant`, `pma_local`, `start_vnc`, etc.).
+Adds a 🏭 **Day Recap** button on **pang.qxs** — pick a date and see every IWMAC plant you visited that day (plant_id, plant name, time of first action, and which actions you performed).
+
+Rocketlane's My Timesheet gets a small button that just opens pang with the date pre-filled — pang has the live, authoritative plant data, so the recap runs there.
 
 ## Install
 
@@ -8,28 +10,29 @@ On Rocketlane My Timesheet, adds a 🏭 **Plants visited** button — pick a dat
 
 ## Usage
 
-1. Install the script.
-2. Open `http://tools.iwmac.local/pang.qxs` once — the script grabs your username and your last 50 recent plant IDs from pang's localStorage and saves them to Tampermonkey storage.
-3. Open `https://kiona.rocketlane.com/timesheets/this-week/my-timesheet`.
-4. Click **🏭 Plants visited** (bottom-right). Pick a date and click **Search**.
-5. Panel queries pang's `get_history` for every known plant (in parallel) and lists the ones where you have activity on that day.
+### From pang
+1. Open `http://tools.iwmac.local/pang.qxs`
+2. Click 🏭 **Day Recap** (bottom-right)
+3. Pick a date → **Search**
+4. Lists every plant where you have actions logged on that date
 
-The plant name appears once you've opened that plant's admin page at least once (we capture the page title).
+By default, only your 50 recent plants are scanned (fast, ~2-3 sec). Tick **Scan all plants** to scan the full IWMAC inventory (~7600 plants, ~30 sec) for older visits.
 
-## Notes
-
-- The script can only query plants it knows about. Initially that's the 50 from `pang.recent`. Every time you open pang or a plant page, the known-plants list grows. Run pang at least once to seed it.
-- Past activity (before the script was installed) **is** recoverable for plants in your known list — pang's `get_history` returns the full server-side history per plant, so picking an old date works as long as pang has the record.
-- All requests are made to `tools.iwmac.local` from the Rocketlane tab via `GM_xmlhttpRequest` — your existing pang session cookie is reused automatically.
-- ~50 parallel-limited requests (8 at a time). Typical search completes in 2–5 seconds.
+### From Rocketlane
+1. On `kiona.rocketlane.com/timesheets/...` click 🏭 **Day Recap**
+2. Pick a date → **Open on pang ↗** opens pang in a new tab with the panel auto-populated
 
 ## How it works
 
-- **`@match http://*.plants.iwmac.local:8080/*`** — captures `plant_id → page title` so we can show plant names. Adds the plant_id to the known-plants list.
-- **`@match http://tools.iwmac.local/pang.qxs*`** — reads `pang.recent` and `pang.login.username` from pang's localStorage and unions them into Tampermonkey storage.
-- **`@match https://kiona.rocketlane.com/timesheets/*`** — adds the floating button. On Search, calls `tools.iwmac.local/services/pang/actions.php` with `method:"get_history"` for every known plant_id, filters each result by `user == your username` and `date == picked date`, then renders.
+Pang already loads `module_plants.coll.data` — the full plant inventory with names — into memory the moment `pang.qxs` opens. The script reads that directly. No SQL, no caches to maintain, no cross-origin sync issues.
+
+For each plant in scope, it calls pang's existing `actions.php` with `method:"get_history"`. Same origin, your existing pang session cookie is used automatically.
+
+## Why v4 is a clean break
+
+v3.x tried to mirror pang's data into Tampermonkey storage so a panel on Rocketlane could read it. That ran into popup blockers, cross-origin localStorage walls, GM-storage sync gaps, and stale name caches. v4 sidesteps all of that by putting the panel where the data lives.
 
 ## Limitations
 
-- Pang has no per-user-across-plants query, so we have to fan out one request per known plant. Plants you've never opened won't be queried.
-- Plant name is taken from the plant admin page's `<h1>` / `<title>`. If you've never opened a plant's admin page in this browser, the name shows as "(name not yet captured)".
+- "Recent plants" mode only scans your last 50 plants (pang's own recent list). Plants you haven't touched recently won't be queried unless you tick "Scan all plants".
+- Pang's API is per-plant (`get_history(plant_id)`) — there's no server-side "list everything user X did on date Y" endpoint, so the script has to fan out. The full-scan mode does ~7600 requests at 8 in parallel.
