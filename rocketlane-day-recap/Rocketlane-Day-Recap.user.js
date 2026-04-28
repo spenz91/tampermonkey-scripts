@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      4.1
+// @version      4.2
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -14,6 +14,8 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_openInTab
 // @connect      tools.iwmac.local
+// @connect      iwmac.local
+// @connect      *
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -25,7 +27,7 @@
     const KEY_USERNAME     = 'pang_username';
     const KEY_LAST_HARVEST = 'last_harvest_ts'; // ms timestamp of most recent successful harvest write
     const KEY_HARVEST_DONE = 'harvest_done_ts'; // set when syncFromPang considers itself complete
-    const SCRIPT_VERSION   = '3.15';
+    const SCRIPT_VERSION   = '4.2';
     const LOG = (...args) => console.log('[Day Recap v' + SCRIPT_VERSION + ']', ...args);
     const KEY_NAMES_PURGED = 'plant_names_purged_v311'; // bump to re-run cleanup; v311 evicts IWMAC default-template names
     const PANEL_ID = 'rl-day-recap-panel';
@@ -231,6 +233,50 @@
     }
 
     // ---------- Rocketlane: panel ----------
+    // Fast targeted name fetch: hit the plant's admin page directly and read <h1>/<title>.
+    // Far cheaper than autoSyncFromPang() (which opens a tab and waits for pang's
+    // full ~7600-plant inventory to stream in over websockets).
+    function gmFetchPlantName(plant_id) {
+        return new Promise(resolve => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `http://${encodeURIComponent(plant_id)}.plants.iwmac.local:8080/`,
+                timeout: 6000,
+                onload: r => {
+                    try {
+                        const html = String(r.responseText || '');
+                        // Prefer <h1>; fall back to <title>. Strip any inner tags + whitespace.
+                        const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+                        const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+                        const raw = (h1?.[1] || title?.[1] || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+                        resolve(raw && !looksLikeBadName(raw) ? raw : null);
+                    } catch { resolve(null); }
+                },
+                onerror:   () => resolve(null),
+                ontimeout: () => resolve(null),
+            });
+        });
+    }
+
+    // Resolve names for the given plant_ids in parallel. Writes to the cache and
+    // returns the count of names actually added.
+    async function fetchMissingPlantNames(plantIds, onProgress) {
+        if (!plantIds || plantIds.length === 0) return 0;
+        const names = GM_getValue(KEY_PLANT_NAMES, {});
+        const todo = plantIds.filter(id => !names[id]);
+        if (todo.length === 0) return 0;
+        let added = 0;
+        await pMap(todo, async (pid) => {
+            const name = await gmFetchPlantName(pid);
+            if (name && names[pid] !== name) {
+                names[pid] = name;
+                added++;
+            }
+        }, PARALLEL, onProgress);
+        if (added > 0) GM_setValue(KEY_PLANT_NAMES, names);
+        return added;
+    }
+
     function gmFetchHistory(plant_id) {
         return new Promise(resolve => {
             GM_xmlhttpRequest({
@@ -462,12 +508,16 @@
                 progress.style.width = '100%';
 
                 // If any visit has no plant name AND we haven't already auto-resynced this panel,
-                // run a background sync (popup), then re-fill names and re-render.
-                const anyMissing = visits.some(v => !v.name);
-                if (anyMissing && !autoResyncDone) {
+                // resolve them via direct admin-page fetch (fast: only the missing plants,
+                // in parallel — no pang tab and no waiting for the full 7600-plant inventory).
+                const missingIds = visits.filter(v => !v.name).map(v => v.plant_id);
+                if (missingIds.length > 0 && !autoResyncDone) {
                     autoResyncDone = true;
-                    list.innerHTML = '<div class="empty">Some plants missing names — re-syncing from pang…</div>';
-                    await autoSyncFromPang();
+                    list.innerHTML = `<div class="empty">Looking up ${missingIds.length} plant name${missingIds.length === 1 ? '' : 's'}…</div>`;
+                    progress.style.width = '0%';
+                    await fetchMissingPlantNames(missingIds, (done, total) => {
+                        progress.style.width = Math.round(done / total * 100) + '%';
+                    });
                     refillNames(visits);
                 }
 
@@ -486,6 +536,9 @@
         const resync = async () => {
             resyncBtn.disabled = true;
             searchBtn.disabled = true;
+            // Manual resync = full pang harvest (refreshes the recent-plants list AND any
+            // names we don't already have). Slow path; only used when the user explicitly
+            // clicks ↻. For the in-search auto-resync we use the fast targeted fetch above.
             list.innerHTML = '<div class="empty">Re-syncing recent plants from pang…</div>';
             await autoSyncFromPang();
             await run();
