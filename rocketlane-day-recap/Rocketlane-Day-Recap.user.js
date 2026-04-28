@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      4.2
+// @version      4.3
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -27,12 +27,14 @@
     const KEY_USERNAME     = 'pang_username';
     const KEY_LAST_HARVEST = 'last_harvest_ts'; // ms timestamp of most recent successful harvest write
     const KEY_HARVEST_DONE = 'harvest_done_ts'; // set when syncFromPang considers itself complete
-    const SCRIPT_VERSION   = '4.2';
+    const KEY_NAME_LOOKUP_IDS = 'name_lookup_ids'; // [plant_id, ...] requested by Rocketlane for a targeted pang sync
+    const SCRIPT_VERSION   = '4.3';
     const LOG = (...args) => console.log('[Day Recap v' + SCRIPT_VERSION + ']', ...args);
     const KEY_NAMES_PURGED = 'plant_names_purged_v311'; // bump to re-run cleanup; v311 evicts IWMAC default-template names
     const PANEL_ID = 'rl-day-recap-panel';
     const BTN_ID   = 'rl-day-recap-fab';
     const PARALLEL = 8;
+    const FULL_INVENTORY_MIN = 7000;
 
     const host = location.hostname;
 
@@ -47,6 +49,8 @@
         'iwmac operation center',
         'iwmac plant server',
         'iwmac',
+        'plant admin: next generation',
+        'plant admin',
     ]);
     function looksLikeBadName(s) {
         if (typeof s !== 'string') return true;
@@ -100,8 +104,13 @@
     function syncFromPang() {
         LOG('syncFromPang() called on', location.href);
         const isSyncTab = window.name === 'rl_pang_sync' || (location.hash && location.hash.includes('rl-sync'));
+        const lookupIds = (() => {
+            const raw = GM_getValue(KEY_NAME_LOOKUP_IDS, []);
+            return Array.isArray(raw) ? raw.map(String).filter(Boolean) : [];
+        })();
         const finish = () => {
             LOG('finish() — marking harvest done. names_count:', Object.keys(GM_getValue(KEY_PLANT_NAMES, {})).length);
+            if (lookupIds.length > 0) GM_setValue(KEY_NAME_LOOKUP_IDS, []);
             // Always signal harvest completion for any Rocketlane caller polling on this key.
             GM_setValue(KEY_HARVEST_DONE, Date.now());
             if (isSyncTab) {
@@ -141,6 +150,16 @@
             };
             if (Array.isArray(coll)) for (const p of coll) consume(p?.plant_id, p?.name);
             if (Array.isArray(bodys)) for (const r of bodys) consume(r?.user?.plant_id, r?.user?.name);
+            // Fallback for the currently rendered pang table/window. This covers cases where
+            // the full collection is still streaming but the searched plant is already visible.
+            document.querySelectorAll('#comp_module_plants_plants_table tbody.qxsTable_body tr').forEach(tr => {
+                const cells = tr.querySelectorAll('td');
+                consume(cells[3]?.textContent?.trim(), cells[4]?.textContent?.trim());
+            });
+            document.querySelectorAll('.qxs_window_header_caption').forEach(el => {
+                const m = (el.textContent || '').match(/\bPlant\s*-\s*(\d+)\s*-\s*(.+)$/i);
+                if (m) consume(m[1], m[2].trim());
+            });
             if (added) {
                 GM_setValue(KEY_PLANT_NAMES, names);
                 GM_setValue(KEY_LAST_HARVEST, Date.now());
@@ -168,15 +187,22 @@
             try {
                 const len = window.module_plants?.coll?.data?.length || 0;
                 harvestNow(); // always merge whatever's there now
+                const names = GM_getValue(KEY_PLANT_NAMES, {});
+
+                if (lookupIds.length > 0 && lookupIds.every(id => !!names[id])) {
+                    finish();
+                    return;
+                }
 
                 if (len > 0) {
                     if (len === lastLen) stableTicks++;
                     else { stableTicks = 0; lastLen = len; }
-                    // Done once stable for ~750 ms OR clearly fully loaded
-                    if (stableTicks >= 3 || len > 1000) { finish(); return; }
+                    // Done once the full inventory is present, or after a larger collection
+                    // has stopped growing. The old >1000 shortcut missed plants like 3168.
+                    if (len >= FULL_INVENTORY_MIN || (len >= 1000 && stableTicks >= 8)) { finish(); return; }
                 }
             } catch {}
-            if (attempts < 80) setTimeout(tryHarvest, 250); // up to ~20s
+            if (attempts < 120) setTimeout(tryHarvest, 250); // up to ~30s
             else finish();
         };
         tryHarvest();
@@ -192,11 +218,13 @@
     // blockers — uses the Tampermonkey extension API). The pang tab's userscript runs syncFromPang,
     // which writes KEY_HARVEST_DONE when complete. We poll that timestamp and close the tab once
     // we see it advance past our start time.
-    function autoSyncFromPang(timeoutMs = 30000) {
+    function autoSyncFromPang(timeoutMs = 30000, lookupIds = []) {
         return new Promise(resolve => {
             const beforeNames = Object.keys(GM_getValue(KEY_PLANT_NAMES, {})).length;
             const beforeKnown = GM_getValue(KEY_KNOWN_PLANTS, []).length;
             const startedAt = Date.now();
+            const lookupList = Array.isArray(lookupIds) ? [...new Set(lookupIds.map(String).filter(Boolean))] : [];
+            GM_setValue(KEY_NAME_LOOKUP_IDS, lookupList);
 
             // Use GM_openInTab if available (preferred — bypasses popup blocker);
             // fall back to window.open with a name so syncFromPang's self-close still fires.
@@ -223,9 +251,11 @@
                     // Give the harvest a brief moment to finalise its GM writes before we close.
                     setTimeout(() => {
                         try { tabHandle.close(); } catch {}
-                        const namesAfter = Object.keys(GM_getValue(KEY_PLANT_NAMES, {})).length;
+                        const names = GM_getValue(KEY_PLANT_NAMES, {});
+                        const namesAfter = Object.keys(names).length;
                         const knownAfter = GM_getValue(KEY_KNOWN_PLANTS, []).length;
-                        resolve(namesAfter > beforeNames || knownAfter > beforeKnown);
+                        const lookupResolved = lookupList.length > 0 && lookupList.every(id => !!names[id]);
+                        resolve(lookupResolved || namesAfter > beforeNames || knownAfter > beforeKnown);
                     }, 400);
                 }
             }, 250);
@@ -233,9 +263,28 @@
     }
 
     // ---------- Rocketlane: panel ----------
-    // Fast targeted name fetch: hit the plant's admin page directly and read <h1>/<title>.
-    // Far cheaper than autoSyncFromPang() (which opens a tab and waits for pang's
-    // full ~7600-plant inventory to stream in over websockets).
+    function extractPlantNameFromHtml(plant_id, html) {
+        const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+
+        for (const caption of doc.querySelectorAll('.qxs_window_header_caption')) {
+            const m = (caption.textContent || '').match(/\bPlant\s*-\s*(\d+)\s*-\s*(.+)$/i);
+            if (m && m[1] === String(plant_id)) return m[2].trim();
+        }
+
+        for (const tr of doc.querySelectorAll('#comp_module_plants_plants_table tbody.qxsTable_body tr')) {
+            const cells = tr.querySelectorAll('td');
+            const id = cells[3]?.textContent?.trim();
+            const name = cells[4]?.textContent?.trim();
+            if (id === String(plant_id) && name) return name;
+        }
+
+        const raw = (doc.querySelector('h1')?.textContent || doc.querySelector('title')?.textContent || '').trim();
+        return raw || null;
+    }
+
+    // Fast targeted name fetch: hit the plant's admin page directly and read exact
+    // plant table/window content first, then <h1>/<title>. Some proxy responses are
+    // only the generic pang shell, so the generic title is filtered by looksLikeBadName().
     function gmFetchPlantName(plant_id) {
         return new Promise(resolve => {
             GM_xmlhttpRequest({
@@ -244,11 +293,7 @@
                 timeout: 6000,
                 onload: r => {
                     try {
-                        const html = String(r.responseText || '');
-                        // Prefer <h1>; fall back to <title>. Strip any inner tags + whitespace.
-                        const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-                        const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-                        const raw = (h1?.[1] || title?.[1] || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+                        const raw = extractPlantNameFromHtml(plant_id, r.responseText).replace(/\s+/g, ' ').trim();
                         resolve(raw && !looksLikeBadName(raw) ? raw : null);
                     } catch { resolve(null); }
                 },
@@ -273,6 +318,18 @@
                 added++;
             }
         }, PARALLEL, onProgress);
+
+        let unresolved = todo.filter(pid => !names[pid]);
+        if (unresolved.length > 0) {
+            await autoSyncFromPang(12000, unresolved);
+            const refreshed = GM_getValue(KEY_PLANT_NAMES, {});
+            unresolved = unresolved.filter(pid => refreshed[pid] && !names[pid]);
+            for (const pid of unresolved) {
+                names[pid] = refreshed[pid];
+                added++;
+            }
+        }
+
         if (added > 0) GM_setValue(KEY_PLANT_NAMES, names);
         return added;
     }
