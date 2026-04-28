@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      4.3
+// @version      4.5
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -28,19 +28,23 @@
     const KEY_LAST_HARVEST = 'last_harvest_ts'; // ms timestamp of most recent successful harvest write
     const KEY_HARVEST_DONE = 'harvest_done_ts'; // set when syncFromPang considers itself complete
     const KEY_NAME_LOOKUP_IDS = 'name_lookup_ids'; // [plant_id, ...] requested by Rocketlane for a targeted pang sync
-    const SCRIPT_VERSION   = '4.3';
+    const SCRIPT_VERSION   = '4.5';
     const LOG = (...args) => console.log('[Day Recap v' + SCRIPT_VERSION + ']', ...args);
-    const KEY_NAMES_PURGED = 'plant_names_purged_v311'; // bump to re-run cleanup; v311 evicts IWMAC default-template names
+    const KEY_NAMES_PURGED = 'plant_names_purged_v44'; // bump to re-run cleanup; v44 evicts "Ukjent anlegg" titles
     const PANEL_ID = 'rl-day-recap-panel';
     const BTN_ID   = 'rl-day-recap-fab';
     const PARALLEL = 8;
     const FULL_INVENTORY_MIN = 7000;
+    const TRUSTED_PLANT_NAMES = {
+        '8179': 'COOP Extra Glommen Brygge',
+    };
 
     const host = location.hostname;
 
     // Names that v3.6 may have scraped from plant-admin error pages. None of these
     // are real IWMAC plant names, so we treat them as "no name captured yet".
     const BAD_NAME_RE = /^(forbidden|unauthorized|access denied|not found|bad gateway|service unavailable|gateway timeout|401|403|404|5\d\d|error|index of|nginx|apache|iis|welcome to)/i;
+    const BAD_NAME_FRAGMENT_RE = /\b(ukjent anlegg|unknown plant)\b/i;
     // Generic IWMAC template defaults that some plants' settings DB still carries (project_name,
     // server_name, plant_server_name) when no real plant name was set. These slipped into the
     // cache from an old SQL fallback. They are NOT real plant names — evict them.
@@ -58,8 +62,28 @@
         if (!t) return true;
         if (t.length > 120) return true; // real names are short
         if (BAD_NAME_RE.test(t)) return true;
+        if (BAD_NAME_FRAGMENT_RE.test(t)) return true;
         if (BAD_NAME_EXACT.has(t.toLowerCase())) return true;
         return false;
+    }
+    function goodPlantName(s) {
+        const t = String(s || '').replace(/\s+/g, ' ').trim();
+        return t && !looksLikeBadName(t) ? t : '';
+    }
+    function cachedPlantName(names, id) {
+        return goodPlantName(names?.[String(id)]);
+    }
+    function applyTrustedPlantNames(names, plantIds = []) {
+        let added = 0;
+        for (const rawId of plantIds) {
+            const id = String(rawId);
+            const trusted = TRUSTED_PLANT_NAMES[id];
+            if (trusted && !cachedPlantName(names, id)) {
+                names[id] = trusted;
+                added++;
+            }
+        }
+        return added;
     }
 
     // One-time cleanup: drop any names that v3.6's admin-page scraper poisoned the cache with.
@@ -189,7 +213,7 @@
                 harvestNow(); // always merge whatever's there now
                 const names = GM_getValue(KEY_PLANT_NAMES, {});
 
-                if (lookupIds.length > 0 && lookupIds.every(id => !!names[id])) {
+                if (lookupIds.length > 0 && lookupIds.every(id => cachedPlantName(names, id))) {
                     finish();
                     return;
                 }
@@ -254,7 +278,7 @@
                         const names = GM_getValue(KEY_PLANT_NAMES, {});
                         const namesAfter = Object.keys(names).length;
                         const knownAfter = GM_getValue(KEY_KNOWN_PLANTS, []).length;
-                        const lookupResolved = lookupList.length > 0 && lookupList.every(id => !!names[id]);
+                        const lookupResolved = lookupList.length > 0 && lookupList.every(id => cachedPlantName(names, id));
                         resolve(lookupResolved || namesAfter > beforeNames || knownAfter > beforeKnown);
                     }, 400);
                 }
@@ -308,9 +332,12 @@
     async function fetchMissingPlantNames(plantIds, onProgress) {
         if (!plantIds || plantIds.length === 0) return 0;
         const names = GM_getValue(KEY_PLANT_NAMES, {});
-        const todo = plantIds.filter(id => !names[id]);
-        if (todo.length === 0) return 0;
-        let added = 0;
+        let added = applyTrustedPlantNames(names, plantIds);
+        const todo = plantIds.filter(id => !cachedPlantName(names, id));
+        if (todo.length === 0) {
+            if (added > 0) GM_setValue(KEY_PLANT_NAMES, names);
+            return added;
+        }
         await pMap(todo, async (pid) => {
             const name = await gmFetchPlantName(pid);
             if (name && names[pid] !== name) {
@@ -319,13 +346,13 @@
             }
         }, PARALLEL, onProgress);
 
-        let unresolved = todo.filter(pid => !names[pid]);
+        let unresolved = todo.filter(pid => !cachedPlantName(names, pid));
         if (unresolved.length > 0) {
             await autoSyncFromPang(12000, unresolved);
             const refreshed = GM_getValue(KEY_PLANT_NAMES, {});
-            unresolved = unresolved.filter(pid => refreshed[pid] && !names[pid]);
+            unresolved = unresolved.filter(pid => cachedPlantName(refreshed, pid) && !cachedPlantName(names, pid));
             for (const pid of unresolved) {
-                names[pid] = refreshed[pid];
+                names[pid] = cachedPlantName(refreshed, pid);
                 added++;
             }
         }
@@ -407,7 +434,7 @@
             const actions = [...new Set(matches.map(m => m.action))];
             return {
                 plant_id: pid,
-                name: names[pid] || '',
+                name: cachedPlantName(names, pid),
                 first_ts: tsFromPangDate(matches[0].date),
                 actions,
                 count: matches.length,
@@ -540,7 +567,7 @@
         const refillNames = (visits) => {
             const names = GM_getValue(KEY_PLANT_NAMES, {});
             for (const v of visits) {
-                if (!v.name && names[v.plant_id]) v.name = names[v.plant_id];
+                if (!v.name && cachedPlantName(names, v.plant_id)) v.name = cachedPlantName(names, v.plant_id);
             }
         };
 
@@ -672,7 +699,7 @@
                     };
                     if (plant_id) {
                         const id = String(plant_id);
-                        out.plant = { id, in_known: known.includes(id), name: names[id] || null };
+                        out.plant = { id, in_known: known.includes(id), name: cachedPlantName(names, id) || null };
                     }
                     return out;
                 },
