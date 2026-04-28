@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Rocketlane Day Recap
-// @version      3.13
+// @version      3.14
 // @description  On Rocketlane My Timesheet, pick a date and see all IWMAC plants you visited that day. Uses pang's get_history API across known plants.
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -12,6 +12,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
+// @grant        GM_openInTab
 // @connect      tools.iwmac.local
 // @run-at       document-idle
 // ==/UserScript==
@@ -22,6 +23,8 @@
     const KEY_KNOWN_PLANTS = 'known_plants';   // [plant_id, ...]
     const KEY_PLANT_NAMES  = 'plant_names';    // { plant_id: name }
     const KEY_USERNAME     = 'pang_username';
+    const KEY_LAST_HARVEST = 'last_harvest_ts'; // ms timestamp of most recent successful harvest write
+    const KEY_HARVEST_DONE = 'harvest_done_ts'; // set when syncFromPang considers itself complete
     const KEY_NAMES_PURGED = 'plant_names_purged_v311'; // bump to re-run cleanup; v311 evicts IWMAC default-template names
     const PANEL_ID = 'rl-day-recap-panel';
     const BTN_ID   = 'rl-day-recap-fab';
@@ -91,8 +94,11 @@
 
     // ---------- Pang page: pull recent list + username + plant names ----------
     function syncFromPang() {
+        const isSyncTab = window.name === 'rl_pang_sync' || (location.hash && location.hash.includes('rl-sync'));
         const finish = () => {
-            if (window.name === 'rl_pang_sync') {
+            // Always signal harvest completion for any Rocketlane caller polling on this key.
+            GM_setValue(KEY_HARVEST_DONE, Date.now());
+            if (isSyncTab) {
                 setTimeout(() => { try { window.close(); } catch {} }, 250);
             }
         };
@@ -129,7 +135,10 @@
             };
             if (Array.isArray(coll)) for (const p of coll) consume(p?.plant_id, p?.name);
             if (Array.isArray(bodys)) for (const r of bodys) consume(r?.user?.plant_id, r?.user?.name);
-            if (added) GM_setValue(KEY_PLANT_NAMES, names);
+            if (added) {
+                GM_setValue(KEY_PLANT_NAMES, names);
+                GM_setValue(KEY_LAST_HARVEST, Date.now());
+            }
             return added;
         };
 
@@ -156,31 +165,50 @@
 
         // On the user's regular pang tab (not our hidden sync popup), keep watching for changes
         // so newly added plants get into the cache without manual ↻ clicks.
-        if (window.name !== 'rl_pang_sync') {
+        if (!isSyncTab) {
             setInterval(harvestNow, 30000);
         }
     }
 
-    // From Rocketlane: open pang in a tiny popup to trigger syncFromPang inside it.
-    // The popup closes itself once it has harvested both the recent list and plant names.
-    function autoSyncFromPang(timeoutMs = 25000) {
+    // From Rocketlane: open pang in a background tab via GM_openInTab (NOT subject to popup
+    // blockers — uses the Tampermonkey extension API). The pang tab's userscript runs syncFromPang,
+    // which writes KEY_HARVEST_DONE when complete. We poll that timestamp and close the tab once
+    // we see it advance past our start time.
+    function autoSyncFromPang(timeoutMs = 30000) {
         return new Promise(resolve => {
+            const beforeNames = Object.keys(GM_getValue(KEY_PLANT_NAMES, {})).length;
             const beforeKnown = GM_getValue(KEY_KNOWN_PLANTS, []).length;
-            const w = window.open(
-                'http://tools.iwmac.local/pang.qxs',
-                'rl_pang_sync',
-                'width=420,height=300,left=0,top=0'
-            );
-            if (!w) { resolve(false); return; }
-            const start = Date.now();
+            const startedAt = Date.now();
+
+            // Use GM_openInTab if available (preferred — bypasses popup blocker);
+            // fall back to window.open with a name so syncFromPang's self-close still fires.
+            let tabHandle = null;
+            try {
+                if (typeof GM_openInTab === 'function') {
+                    // active:false → don't steal focus; insert:true → open right next to current tab
+                    tabHandle = GM_openInTab('http://tools.iwmac.local/pang.qxs#rl-sync', { active: false, insert: true, setParent: true });
+                }
+            } catch {}
+            if (!tabHandle) {
+                tabHandle = window.open('http://tools.iwmac.local/pang.qxs', 'rl_pang_sync', 'width=420,height=300,left=0,top=0');
+            }
+            if (!tabHandle) { resolve(false); return; }
+
             const tick = setInterval(() => {
-                const closed = (() => { try { return w.closed; } catch { return false; } })();
-                const timedOut = Date.now() - start > timeoutMs;
-                if (closed || timedOut) {
+                const harvestDone = GM_getValue(KEY_HARVEST_DONE, 0) > startedAt;
+                const tabClosed = (() => {
+                    try { return tabHandle.closed === true; } catch { return false; }
+                })();
+                const timedOut = Date.now() - startedAt > timeoutMs;
+                if (harvestDone || tabClosed || timedOut) {
                     clearInterval(tick);
-                    try { w.close(); } catch {}
-                    const grew = GM_getValue(KEY_KNOWN_PLANTS, []).length > beforeKnown;
-                    resolve(grew);
+                    // Give the harvest a brief moment to finalise its GM writes before we close.
+                    setTimeout(() => {
+                        try { tabHandle.close(); } catch {}
+                        const namesAfter = Object.keys(GM_getValue(KEY_PLANT_NAMES, {})).length;
+                        const knownAfter = GM_getValue(KEY_KNOWN_PLANTS, []).length;
+                        resolve(namesAfter > beforeNames || knownAfter > beforeKnown);
+                    }, 400);
                 }
             }, 250);
         });
