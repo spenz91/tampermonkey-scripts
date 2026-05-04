@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.2
+// @version      1.3
 // @description  Adds a button to copy the entire IWMAC sys_tools topology (fully expanded) to the clipboard as TSV.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -14,17 +14,12 @@
 (function () {
     'use strict';
 
-    const BTN_ID = 'iwmac-topo-copy-btn';
-    const CAPTION_ID = 'iwmac-topo-copy-caption';
+    const COPY_BTN_ID   = 'iwmac-topo-copy-btn';
+    const EXPORT_BTN_ID = 'iwmac-topo-export-btn';
 
-    // Build a w2ui-style toolbar button and inject it into the topology toolbar's right-aligned cell.
-    function makeButton() {
-        if (document.getElementById(BTN_ID)) return;
-        const host = document.getElementById('tb_grid_topology_toolbar_right');
-        if (!host) return;
-
+    function buildToolbarButton(tdId, captionId, iconChar, captionText, onClick) {
         const td = document.createElement('td');
-        td.id = BTN_ID;
+        td.id = tdId;
         td.valign = 'middle';
         td.style.cssText = 'padding-right:8px;';
         td.innerHTML = `
@@ -32,8 +27,8 @@
                 <table cellpadding="0" cellspacing="0" class="w2ui-button">
                     <tbody><tr><td>
                         <table cellpadding="1" cellspacing="0"><tbody><tr>
-                            <td><div class="w2ui-tb-image"><span style="display:inline-block;font-size:14px;line-height:14px;">&#128203;</span></div></td>
-                            <td id="${CAPTION_ID}" class="w2ui-tb-text w2ui-tb-caption" nowrap="nowrap">Copy Topology</td>
+                            <td><div class="w2ui-tb-image"><span style="display:inline-block;font-size:14px;line-height:14px;">${iconChar}</span></div></td>
+                            <td id="${captionId}" class="w2ui-tb-text w2ui-tb-caption" nowrap="nowrap">${captionText}</td>
                         </tr></tbody></table>
                     </td></tr></tbody>
                 </table>
@@ -43,14 +38,33 @@
         btn.addEventListener('mouseleave', () => btn.classList.remove('over', 'down'));
         btn.addEventListener('mousedown',  () => btn.classList.add('down'));
         btn.addEventListener('mouseup',    () => btn.classList.remove('down'));
-        btn.addEventListener('click', onCopy);
-
-        // Right-aligned cell is a 100%-width spacer; insert our td before it so it sits flush right.
-        host.parentNode.insertBefore(td, host);
+        btn.addEventListener('click', onClick);
+        return td;
     }
 
-    function flash(msg, ok) {
-        const cap = document.getElementById(CAPTION_ID);
+    // Build w2ui-style toolbar buttons and inject them into the topology toolbar's right-aligned cell.
+    function makeButton() {
+        const host = document.getElementById('tb_grid_topology_toolbar_right');
+        if (!host) return;
+
+        if (!document.getElementById(COPY_BTN_ID)) {
+            const copyTd = buildToolbarButton(
+                COPY_BTN_ID, COPY_BTN_ID + '-cap',
+                '&#128203;', 'Copy Topology', onCopy
+            );
+            host.parentNode.insertBefore(copyTd, host);
+        }
+        if (!document.getElementById(EXPORT_BTN_ID)) {
+            const expTd = buildToolbarButton(
+                EXPORT_BTN_ID, EXPORT_BTN_ID + '-cap',
+                '&#128190;', 'Export to Excel', onExport
+            );
+            host.parentNode.insertBefore(expTd, host);
+        }
+    }
+
+    function flash(captionId, msg, ok) {
+        const cap = document.getElementById(captionId);
         if (!cap) return;
         const orig = cap.textContent;
         const origColor = cap.style.color;
@@ -161,11 +175,11 @@
     }
 
     async function onCopy() {
+        const cap = COPY_BTN_ID + '-cap';
         expandAll();
-        // Wait briefly for the grid to render expanded rows.
         await new Promise(r => setTimeout(r, 350));
         const rows = scrapeRows();
-        if (!rows.length) { flash('No rows found', false); return; }
+        if (!rows.length) { flash(cap, 'No rows found', false); return; }
         const tsv = buildTSV(rows);
         const html = buildHTML(rows);
         try {
@@ -177,11 +191,57 @@
                     await navigator.clipboard.writeText(tsv);
                 }
             }
-            flash(`Copied ${rows.length} rows`, true);
+            flash(cap, `Copied ${rows.length} rows`, true);
         } catch (e) {
             console.error('Clipboard write failed', e);
-            flash('Copy failed', false);
+            flash(cap, 'Copy failed', false);
         }
+    }
+
+    function getPlantLabel() {
+        // Header shows e.g. "6176 - Extra Moi"
+        const el = document.querySelector('.plant_info');
+        const raw = (el && el.textContent || '').trim();
+        return raw.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_') || 'topology';
+    }
+
+    function buildXlsHtmlDocument(rows) {
+        // Excel happily opens an HTML document saved with .xls — preserves headers, borders, indentation.
+        const tableHtml = buildHTML(rows);
+        return '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+               'xmlns:x="urn:schemas-microsoft-com:office:excel" ' +
+               'xmlns="http://www.w3.org/TR/REC-html40">' +
+               '<head><meta charset="UTF-8"><!--[if gte mso 9]><xml>' +
+               '<x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>' +
+               '<x:Name>Topology</x:Name><x:WorksheetOptions><x:DisplayGridlines/>' +
+               '</x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>' +
+               '</xml><![endif]--></head><body>' + tableHtml + '</body></html>';
+    }
+
+    function onExport() {
+        const cap = EXPORT_BTN_ID + '-cap';
+        expandAll();
+        setTimeout(() => {
+            const rows = scrapeRows();
+            if (!rows.length) { flash(cap, 'No rows found', false); return; }
+            try {
+                const doc = buildXlsHtmlDocument(rows);
+                const blob = new Blob(['﻿', doc], { type: 'application/vnd.ms-excel' });
+                const url = URL.createObjectURL(blob);
+                const today = new Date().toISOString().slice(0, 10);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `topology_${getPlantLabel()}_${today}.xls`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+                flash(cap, `Exported ${rows.length} rows`, true);
+            } catch (e) {
+                console.error('Export failed', e);
+                flash(cap, 'Export failed', false);
+            }
+        }, 350);
     }
 
     // Toolbar is rebuilt by w2ui when navigating between sidebar nodes — keep retrying.
