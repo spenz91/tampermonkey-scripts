@@ -2,11 +2,10 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.5
+// @version      1.6
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
-// @require      https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js
 // @run-at       document-idle
 // @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js
@@ -219,19 +218,55 @@
         return s;
     }
 
-    function getJSZip() {
-        // @require loads JSZip into the userscript sandbox; UMD may attach it to varying globals.
-        try { if (typeof JSZip !== 'undefined' && JSZip) return JSZip; } catch (e) {}
-        if (typeof globalThis !== 'undefined' && globalThis.JSZip) return globalThis.JSZip;
-        if (typeof unsafeWindow !== 'undefined' && unsafeWindow.JSZip) return unsafeWindow.JSZip;
-        if (typeof window !== 'undefined' && window.JSZip) return window.JSZip;
-        return null;
+    // -- Tiny stored-zip writer (no external dependency, Excel accepts uncompressed xlsx) --
+    const CRC_TBL = (() => {
+        const t = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c; }
+        return t;
+    })();
+    function crc32(bytes) {
+        let c = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) c = CRC_TBL[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+        return (c ^ 0xFFFFFFFF) >>> 0;
+    }
+    function makeZip(files) {
+        const enc = new TextEncoder();
+        const parts = [], central = []; let offset = 0;
+        for (const f of files) {
+            const nameBytes = enc.encode(f.name);
+            const data = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+            const c = crc32(data);
+            const lfh = new ArrayBuffer(30 + nameBytes.length);
+            const dv = new DataView(lfh);
+            dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true); dv.setUint16(6, 0, true);
+            dv.setUint16(8, 0, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0x21, true);
+            dv.setUint32(14, c, true); dv.setUint32(18, data.length, true); dv.setUint32(22, data.length, true);
+            dv.setUint16(26, nameBytes.length, true); dv.setUint16(28, 0, true);
+            new Uint8Array(lfh, 30).set(nameBytes);
+            parts.push(new Uint8Array(lfh)); parts.push(data);
+            const cdh = new ArrayBuffer(46 + nameBytes.length);
+            const cv = new DataView(cdh);
+            cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+            cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0x21, true);
+            cv.setUint32(16, c, true); cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true);
+            cv.setUint16(28, nameBytes.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+            cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, offset, true);
+            new Uint8Array(cdh, 46).set(nameBytes);
+            central.push(new Uint8Array(cdh));
+            offset += 30 + nameBytes.length + data.length;
+        }
+        let cdSize = 0; for (const c of central) cdSize += c.length;
+        const eocd = new ArrayBuffer(22);
+        const ev = new DataView(eocd);
+        ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+        ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+        ev.setUint32(12, cdSize, true); ev.setUint32(16, offset, true); ev.setUint16(20, 0, true);
+        return new Blob([...parts, ...central, new Uint8Array(eocd)],
+            { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
 
     // Real .xlsx with outlineLevel per row so Excel shows native +/- collapse buttons in the gutter.
-    async function buildXlsx(rows) {
-        const JSZipLib = getJSZip();
-        if (!JSZipLib) throw new Error('JSZip not loaded (check @require)');
+    function buildXlsx(rows) {
 
         const maxDepth = rows.reduce((m, r) => Math.max(m, r.depth), 0);
 
@@ -307,15 +342,14 @@
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`;
 
-        const zip = new JSZipLib();
-        zip.file('[Content_Types].xml', contentTypes);
-        zip.file('_rels/.rels', rootRels);
-        zip.file('xl/workbook.xml', workbookXml);
-        zip.file('xl/_rels/workbook.xml.rels', workbookRels);
-        zip.file('xl/styles.xml', stylesXml);
-        zip.file('xl/worksheets/sheet1.xml', sheetXml);
-
-        return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        return makeZip([
+            { name: '[Content_Types].xml',         data: contentTypes },
+            { name: '_rels/.rels',                 data: rootRels },
+            { name: 'xl/workbook.xml',             data: workbookXml },
+            { name: 'xl/_rels/workbook.xml.rels',  data: workbookRels },
+            { name: 'xl/styles.xml',               data: stylesXml },
+            { name: 'xl/worksheets/sheet1.xml',    data: sheetXml },
+        ]);
     }
 
     async function onExport() {
@@ -325,7 +359,7 @@
         const rows = scrapeRows();
         if (!rows.length) { flash(cap, 'No rows found', false); return; }
         try {
-            const blob = await buildXlsx(rows);
+            const blob = buildXlsx(rows);
             const url = URL.createObjectURL(blob);
             const today = new Date().toISOString().slice(0, 10);
             const a = document.createElement('a');
