@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.1
+// @version      1.2
 // @description  Adds a button to copy the entire IWMAC sys_tools topology (fully expanded) to the clipboard as TSV.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -15,40 +15,52 @@
     'use strict';
 
     const BTN_ID = 'iwmac-topo-copy-btn';
+    const CAPTION_ID = 'iwmac-topo-copy-caption';
 
+    // Build a w2ui-style toolbar button and inject it into the topology toolbar's right-aligned cell.
     function makeButton() {
         if (document.getElementById(BTN_ID)) return;
-        const btn = document.createElement('button');
-        btn.id = BTN_ID;
-        btn.textContent = 'Copy Topology';
-        Object.assign(btn.style, {
-            position: 'fixed',
-            top: '6px',
-            right: '12px',
-            zIndex: 999999,
-            padding: '6px 12px',
-            background: '#1976d2',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            font: '13px sans-serif',
-            cursor: 'pointer',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.25)'
-        });
+        const host = document.getElementById('tb_grid_topology_toolbar_right');
+        if (!host) return;
+
+        const td = document.createElement('td');
+        td.id = BTN_ID;
+        td.valign = 'middle';
+        td.style.cssText = 'padding-right:8px;';
+        td.innerHTML = `
+            <div>
+                <table cellpadding="0" cellspacing="0" class="w2ui-button">
+                    <tbody><tr><td>
+                        <table cellpadding="1" cellspacing="0"><tbody><tr>
+                            <td><div class="w2ui-tb-image"><span style="display:inline-block;font-size:14px;line-height:14px;">&#128203;</span></div></td>
+                            <td id="${CAPTION_ID}" class="w2ui-tb-text w2ui-tb-caption" nowrap="nowrap">Copy Topology</td>
+                        </tr></tbody></table>
+                    </td></tr></tbody>
+                </table>
+            </div>`;
+        const btn = td.querySelector('table.w2ui-button');
+        btn.addEventListener('mouseenter', () => btn.classList.add('over'));
+        btn.addEventListener('mouseleave', () => btn.classList.remove('over', 'down'));
+        btn.addEventListener('mousedown',  () => btn.classList.add('down'));
+        btn.addEventListener('mouseup',    () => btn.classList.remove('down'));
         btn.addEventListener('click', onCopy);
-        document.body.appendChild(btn);
+
+        // Right-aligned cell is a 100%-width spacer; insert our td before it so it sits flush right.
+        host.parentNode.insertBefore(td, host);
     }
 
     function flash(msg, ok) {
-        const btn = document.getElementById(BTN_ID);
-        if (!btn) return;
-        const orig = btn.textContent;
-        const origBg = btn.style.background;
-        btn.textContent = msg;
-        btn.style.background = ok ? '#2e7d32' : '#c62828';
+        const cap = document.getElementById(CAPTION_ID);
+        if (!cap) return;
+        const orig = cap.textContent;
+        const origColor = cap.style.color;
+        cap.textContent = msg;
+        cap.style.color = ok ? '#2e7d32' : '#c62828';
+        cap.style.fontWeight = 'bold';
         setTimeout(() => {
-            btn.textContent = orig;
-            btn.style.background = origBg;
+            cap.textContent = orig;
+            cap.style.color = origColor;
+            cap.style.fontWeight = '';
         }, 1500);
     }
 
@@ -172,7 +184,11 @@
         }
     }
 
-    // Topology view lives inside the sys_tools page; just always show the button.
-    if (document.body) makeButton();
-    else window.addEventListener('DOMContentLoaded', makeButton);
+    // Toolbar is rebuilt by w2ui when navigating between sidebar nodes — keep retrying.
+    function ensureButton() {
+        makeButton();
+    }
+    setInterval(ensureButton, 750);
+    if (document.body) ensureButton();
+    else window.addEventListener('DOMContentLoaded', ensureButton);
 })();
