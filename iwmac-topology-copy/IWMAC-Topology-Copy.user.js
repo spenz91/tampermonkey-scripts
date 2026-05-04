@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.4
+// @version      1.5
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -64,10 +64,11 @@
         }
     }
 
-    function flash(captionId, msg, ok) {
+    function flash(captionId, msg, ok, durationMs) {
         const cap = document.getElementById(captionId);
         if (!cap) return;
-        const orig = cap.textContent;
+        const orig = cap.dataset.origText || cap.textContent;
+        cap.dataset.origText = orig;
         const origColor = cap.style.color;
         cap.textContent = msg;
         cap.style.color = ok ? '#2e7d32' : '#c62828';
@@ -76,7 +77,7 @@
             cap.textContent = orig;
             cap.style.color = origColor;
             cap.style.fontWeight = '';
-        }, 1500);
+        }, durationMs || 1500);
     }
 
     function expandAll() {
@@ -218,10 +219,19 @@
         return s;
     }
 
+    function getJSZip() {
+        // @require loads JSZip into the userscript sandbox; UMD may attach it to varying globals.
+        try { if (typeof JSZip !== 'undefined' && JSZip) return JSZip; } catch (e) {}
+        if (typeof globalThis !== 'undefined' && globalThis.JSZip) return globalThis.JSZip;
+        if (typeof unsafeWindow !== 'undefined' && unsafeWindow.JSZip) return unsafeWindow.JSZip;
+        if (typeof window !== 'undefined' && window.JSZip) return window.JSZip;
+        return null;
+    }
+
     // Real .xlsx with outlineLevel per row so Excel shows native +/- collapse buttons in the gutter.
     async function buildXlsx(rows) {
-        const JSZip = (typeof unsafeWindow !== 'undefined' ? unsafeWindow.JSZip : null) || window.JSZip;
-        if (!JSZip) throw new Error('JSZip not loaded');
+        const JSZipLib = getJSZip();
+        if (!JSZipLib) throw new Error('JSZip not loaded (check @require)');
 
         const maxDepth = rows.reduce((m, r) => Math.max(m, r.depth), 0);
 
@@ -297,13 +307,13 @@
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`;
 
-        const zip = new JSZip();
+        const zip = new JSZipLib();
         zip.file('[Content_Types].xml', contentTypes);
-        zip.folder('_rels').file('.rels', rootRels);
-        zip.folder('xl').file('workbook.xml', workbookXml);
-        zip.folder('xl/_rels').file('workbook.xml.rels', workbookRels);
-        zip.folder('xl').file('styles.xml', stylesXml);
-        zip.folder('xl/worksheets').file('sheet1.xml', sheetXml);
+        zip.file('_rels/.rels', rootRels);
+        zip.file('xl/workbook.xml', workbookXml);
+        zip.file('xl/_rels/workbook.xml.rels', workbookRels);
+        zip.file('xl/styles.xml', stylesXml);
+        zip.file('xl/worksheets/sheet1.xml', sheetXml);
 
         return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
@@ -327,8 +337,8 @@
             setTimeout(() => URL.revokeObjectURL(url), 5000);
             flash(cap, `Exported ${rows.length} rows`, true);
         } catch (e) {
-            console.error('Export failed', e);
-            flash(cap, 'Export failed', false);
+            console.error('[IWMAC Topology] Export failed', e);
+            flash(cap, 'Export failed: ' + (e && e.message ? e.message : e), false, 5000);
         }
     }
 
