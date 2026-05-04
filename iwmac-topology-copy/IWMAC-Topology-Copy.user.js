@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.0
+// @version      1.1
 // @description  Adds a button to copy the entire IWMAC sys_tools topology (fully expanded) to the clipboard as TSV.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -92,6 +92,62 @@
         return lines.join('\n');
     }
 
+    function esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    function buildHTML(rows) {
+        const tableStyle = 'border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;';
+        const thStyle = 'border:1px solid #999;padding:4px 8px;background:#eee;text-align:left;';
+        const tdStyle = 'border:1px solid #ccc;padding:3px 8px;';
+        const indent = '    '; // non-breaking spaces survive HTML pasting
+        let html = `<table style="${tableStyle}"><thead><tr>` +
+            `<th style="${thStyle}">Tree</th>` +
+            `<th style="${thStyle}">Unit name</th>` +
+            `<th style="${thStyle}">Owner</th>` +
+            `<th style="${thStyle}">Status</th>` +
+            `</tr></thead><tbody>`;
+        for (const r of rows) {
+            const isGroup = !r.name && !r.owner && !r.status;
+            const rowBg = isGroup ? 'background:#f5f5f5;font-weight:bold;' : '';
+            const treeCell = indent.repeat(r.depth) + esc(r.tree);
+            html += `<tr style="${rowBg}">` +
+                `<td style="${tdStyle}">${treeCell}</td>` +
+                `<td style="${tdStyle}">${esc(r.name)}</td>` +
+                `<td style="${tdStyle}">${esc(r.owner)}</td>` +
+                `<td style="${tdStyle}">${esc(r.status)}</td>` +
+                `</tr>`;
+        }
+        html += '</tbody></table>';
+        return html;
+    }
+
+    async function writeRichClipboard(html, tsv) {
+        // Preferred: write both HTML (for Zendesk / Gmail / Word) and plain text (for Excel / Notepad).
+        if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+            try {
+                await navigator.clipboard.write([new ClipboardItem({
+                    'text/html': new Blob([html], { type: 'text/html' }),
+                    'text/plain': new Blob([tsv], { type: 'text/plain' })
+                })]);
+                return true;
+            } catch (e) { /* fall through */ }
+        }
+        // Fallback: synthetic copy event with both formats.
+        try {
+            const handler = (e) => {
+                e.preventDefault();
+                e.clipboardData.setData('text/html', html);
+                e.clipboardData.setData('text/plain', tsv);
+            };
+            document.addEventListener('copy', handler, { once: true });
+            const ok = document.execCommand('copy');
+            return ok;
+        } catch (e) { return false; }
+    }
+
     async function onCopy() {
         expandAll();
         // Wait briefly for the grid to render expanded rows.
@@ -99,11 +155,15 @@
         const rows = scrapeRows();
         if (!rows.length) { flash('No rows found', false); return; }
         const tsv = buildTSV(rows);
+        const html = buildHTML(rows);
         try {
-            if (typeof GM_setClipboard === 'function') {
-                GM_setClipboard(tsv, { type: 'text', mimetype: 'text/plain' });
-            } else {
-                await navigator.clipboard.writeText(tsv);
+            const ok = await writeRichClipboard(html, tsv);
+            if (!ok) {
+                if (typeof GM_setClipboard === 'function') {
+                    GM_setClipboard(html, { type: 'text', mimetype: 'text/html' });
+                } else {
+                    await navigator.clipboard.writeText(tsv);
+                }
             }
             flash(`Copied ${rows.length} rows`, true);
         } catch (e) {
