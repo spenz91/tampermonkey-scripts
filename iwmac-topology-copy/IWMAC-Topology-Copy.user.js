@@ -2,10 +2,12 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.6
-// @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx with collapsible outline levels.
+// @version      1.7
+// @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
+// @grant        GM_xmlhttpRequest
+// @connect      toolbox.iwmac.local
 // @run-at       document-idle
 // @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js
@@ -266,11 +268,16 @@
     }
 
     // Real .xlsx with outlineLevel per row so Excel shows native +/- collapse buttons in the gutter.
-    function buildXlsx(rows) {
+    // apiByUnitId: optional map from UPPER(unit_id) → API row, merged onto leaf rows as extra columns.
+    function buildXlsx(rows, apiByUnitId) {
 
         const maxDepth = rows.reduce((m, r) => Math.max(m, r.depth), 0);
+        const hasApi = !!(apiByUnitId && Object.keys(apiByUnitId).length);
 
-        const headers = ['Tree', 'Unit name', 'Owner', 'Status'];
+        const headers = hasApi
+            ? ['Tree', 'Unit name', 'Owner', 'Status', 'Connection type', 'Address', 'Comm port', 'Baudrate', 'Parity', 'Driver addr']
+            : ['Tree', 'Unit name', 'Owner', 'Status'];
+        const colCount = headers.length;
         let sheetRows = '';
 
         // Header row (style s="1" = bold + grey)
@@ -283,24 +290,52 @@
             const isGroup = !r.name && !r.owner && !r.status;
             const styleAttr = isGroup ? ' s="2"' : '';
             const outlineAttr = ` outlineLevel="${r.depth}"`;
-            // Keep visible indentation inside the cell so the hierarchy still reads when expanded.
             const indentedTree = '    '.repeat(r.depth) + r.tree;
-            const cells = [indentedTree, r.name, r.owner, r.status].map((v, i) =>
+            const base = [indentedTree, r.name, r.owner, r.status];
+            let extra = ['', '', '', '', '', ''];
+            if (hasApi && !isGroup) {
+                const api = apiByUnitId[(r.tree || '').trim().toUpperCase()];
+                if (api) {
+                    extra = [
+                        api.connection_type || '',
+                        api.resolved_address || '',
+                        api.comm_port || '',
+                        api.baudrate || '',
+                        api.parity || '',
+                        api.driver_addr || '',
+                    ];
+                }
+            }
+            const values = hasApi ? base.concat(extra) : base;
+            const cells = values.map((v, i) =>
                 `<c r="${colLetter(i + 1)}${rowNum}" t="inlineStr"${styleAttr}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`
             ).join('');
             sheetRows += `<row r="${rowNum}"${outlineAttr}>${cells}</row>`;
         });
 
-        const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<sheetPr><outlinePr summaryBelow="0" summaryRight="0"/></sheetPr>
-<sheetFormatPr defaultRowHeight="15" outlineLevelRow="${maxDepth}"/>
-<cols>
+        const colsXml = hasApi ? `<cols>
 <col min="1" max="1" width="36" customWidth="1"/>
 <col min="2" max="2" width="32" customWidth="1"/>
 <col min="3" max="3" width="14" customWidth="1"/>
 <col min="4" max="4" width="10" customWidth="1"/>
-</cols>
+<col min="5" max="5" width="22" customWidth="1"/>
+<col min="6" max="6" width="22" customWidth="1"/>
+<col min="7" max="7" width="10" customWidth="1"/>
+<col min="8" max="8" width="10" customWidth="1"/>
+<col min="9" max="9" width="10" customWidth="1"/>
+<col min="10" max="10" width="14" customWidth="1"/>
+</cols>` : `<cols>
+<col min="1" max="1" width="36" customWidth="1"/>
+<col min="2" max="2" width="32" customWidth="1"/>
+<col min="3" max="3" width="14" customWidth="1"/>
+<col min="4" max="4" width="10" customWidth="1"/>
+</cols>`;
+
+        const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetPr><outlinePr summaryBelow="0" summaryRight="0"/></sheetPr>
+<sheetFormatPr defaultRowHeight="15" outlineLevelRow="${maxDepth}"/>
+${colsXml}
 <sheetData>${sheetRows}</sheetData>
 </worksheet>`;
 
@@ -352,14 +387,125 @@
         ]);
     }
 
+    function getPlantIdFromHost() {
+        // Hostname is e.g. "6176.plants.iwmac.local"
+        const host = location.hostname || '';
+        const m = host.match(/^(\d+)\./);
+        return m ? m[1] : '';
+    }
+
+    function gmPostJson(url, payload) {
+        return new Promise((resolve, reject) => {
+            if (typeof GM_xmlhttpRequest !== 'function') return reject(new Error('GM_xmlhttpRequest not granted'));
+            GM_xmlhttpRequest({
+                method: 'POST', url, timeout: 30000,
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                data: JSON.stringify(payload),
+                onload: r => {
+                    try { resolve({ status: r.status, body: JSON.parse(r.responseText) }); }
+                    catch (e) { reject(new Error('Bad JSON from API: ' + r.responseText.substring(0, 200))); }
+                },
+                onerror: e => reject(new Error('API network error')),
+                ontimeout: () => reject(new Error('API timeout')),
+            });
+        });
+    }
+
+    // SQL adapted from the topology-export query. Literal ';' replaced with CHAR(59) so the
+    // toolbox API's safety validator doesn't split it as multiple statements.
+    function buildPlantUnitsSql(includeBacnet) {
+        const bacnetExpr = includeBacnet
+            ? `COALESCE(NULLIF(bd.ip_address, ''), NULLIF(u.driver_adr_extra, ''))`
+            : `NULLIF(u.driver_adr_extra, '')`;
+        const bacnetJoin = includeBacnet
+            ? `LEFT JOIN iw_bacnet2_scanner.iw_bacnet_devices AS bd ON bd.object_instance=SUBSTRING_INDEX(u.driver_addr,'_',-1) AND u.driver_type LIKE 'BACNET%'`
+            : '';
+        return `SELECT plant_id.value AS plant_id, plant_name.value AS plant_name, u.unit_id, u.unit_name, u.driver_type, u.driver_addr,
+            CASE WHEN u.driver_type LIKE 'BACNET%' THEN 'Bacnet'
+                 WHEN u.driver_type='AK2' THEN 'Danfoss AK2 TCP/IP'
+                 WHEN u.driver_type='AK3' THEN 'Danfoss AK3 XML'
+                 WHEN mb_mode.value='0' THEN 'Modbus RTU'
+                 WHEN mb_mode.value='1' THEN 'Modbus ASCII'
+                 WHEN mb_mode.value='2' THEN 'Modbus TCP'
+                 ELSE u.driver_type END AS connection_type,
+            CASE WHEN u.driver_type LIKE 'BACNET%' THEN ${bacnetExpr}
+                 WHEN u.driver_type='AK2' THEN tcpip_server.value
+                 WHEN u.driver_type='AK3' THEN SUBSTRING_INDEX(SUBSTRING_INDEX(REPLACE(REPLACE(xml_service_addr.value,'https://',''),'http://',''),'/',1),':',1)
+                 WHEN mb_mode.value='2' AND LOCATE(CONCAT(CHAR(10),SUBSTRING_INDEX(u.driver_addr,'_',1),CHAR(59)),CONCAT(CHAR(10),REPLACE(mb_tcp_servers.value,CHAR(13),'')))>0
+                     THEN SUBSTRING_INDEX(SUBSTRING_INDEX(CONCAT(CHAR(10),REPLACE(mb_tcp_servers.value,CHAR(13),'')),CONCAT(CHAR(10),SUBSTRING_INDEX(u.driver_addr,'_',1),CHAR(59)),-1),CHAR(59),1)
+                 ELSE '' END AS resolved_address,
+            CASE WHEN mb_mode.value IN ('0','1') THEN comm_port.value ELSE '' END AS comm_port,
+            CASE WHEN mb_mode.value IN ('0','1') THEN comm_baudrate.value ELSE '' END AS baudrate,
+            CASE WHEN mb_mode.value IN ('0','1') THEN
+                CASE LOWER(comm_parity.value) WHEN '0' THEN 'None' WHEN 'n' THEN 'None' WHEN 'none' THEN 'None'
+                    WHEN '1' THEN 'Odd' WHEN 'o' THEN 'Odd' WHEN 'odd' THEN 'Odd'
+                    WHEN '2' THEN 'Even' WHEN 'e' THEN 'Even' WHEN 'even' THEN 'Even'
+                    WHEN '3' THEN 'Mark' WHEN 'm' THEN 'Mark' WHEN 'mark' THEN 'Mark'
+                    WHEN '4' THEN 'Space' WHEN 's' THEN 'Space' WHEN 'space' THEN 'Space'
+                    ELSE '' END
+                ELSE '' END AS parity
+            FROM iw_plant_server3.iw_sys_plant_units AS u
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS plant_id ON plant_id.setting='plant_id' AND plant_id.owner='ALL'
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS plant_name ON plant_name.setting='plant_name' AND plant_name.owner='ALL'
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS mb_mode ON mb_mode.setting='mb_mode' AND mb_mode.owner=u.driver_type
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS mb_tcp_servers ON mb_tcp_servers.setting='mb_tcp_servers' AND mb_tcp_servers.owner=u.driver_type
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS comm_port ON comm_port.setting='comm_port' AND comm_port.owner=u.driver_type
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS comm_baudrate ON comm_baudrate.setting='comm_baudrate' AND comm_baudrate.owner=u.driver_type
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS comm_parity ON comm_parity.setting='comm_parity' AND comm_parity.owner=u.driver_type
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS tcpip_server ON tcpip_server.setting='tcpip_server' AND tcpip_server.owner=u.driver_type
+            LEFT JOIN iw_plant_server3.iw_sys_plant_settings AS xml_service_addr ON xml_service_addr.setting='xml_service_addr' AND xml_service_addr.owner=u.driver_type
+            ${bacnetJoin}
+            WHERE u.active='1' AND LEFT(u.unit_id,3)<>'VV_' AND LEFT(u.unit_name,3)<>'VV_' AND UPPER(TRIM(u.unit_id))<>'SERVER'
+            ORDER BY u.driver_type, u.unit_id`;
+    }
+
+    async function fetchUnitsApi(plantId) {
+        const url = 'http://toolbox.iwmac.local:8505/plant-sql/';
+        async function call(includeBacnet) {
+            return gmPostJson(url, { plant_id: plantId, sql_command: buildPlantUnitsSql(includeBacnet) });
+        }
+        let res = await call(true);
+        const ok = res.body && res.body.success;
+        if (!ok) {
+            const err = (res.body && (res.body.error || res.body.message)) || '';
+            // Plant has no BACnet scanner DB → retry without that join
+            if (/iw_bacnet|doesn.?t exist/i.test(err)) {
+                res = await call(false);
+            } else {
+                throw new Error(err || ('HTTP ' + res.status));
+            }
+        }
+        if (!res.body || !res.body.success) {
+            throw new Error((res.body && (res.body.error || res.body.message)) || 'API call failed');
+        }
+        const dataRows = (res.body.results && res.body.results[0] && res.body.results[0].data) || [];
+        const map = {};
+        for (const row of dataRows) {
+            const k = String(row.unit_id || '').trim().toUpperCase();
+            if (k) map[k] = row;
+        }
+        return map;
+    }
+
     async function onExport() {
         const cap = EXPORT_BTN_ID + '-cap';
         expandAll();
         await new Promise(r => setTimeout(r, 350));
         const rows = scrapeRows();
         if (!rows.length) { flash(cap, 'No rows found', false); return; }
+
+        // Try to fetch API in parallel; degrade gracefully if it fails.
+        let apiMap = null;
+        const plantId = getPlantIdFromHost();
+        if (plantId) {
+            try { apiMap = await fetchUnitsApi(plantId); }
+            catch (e) {
+                console.warn('[IWMAC Topology] API fetch failed, exporting topology only:', e);
+                flash(cap, 'API failed: ' + (e.message || e) + ' — topology only', false, 4000);
+            }
+        }
         try {
-            const blob = buildXlsx(rows);
+            const blob = buildXlsx(rows, apiMap);
             const url = URL.createObjectURL(blob);
             const today = new Date().toISOString().slice(0, 10);
             const a = document.createElement('a');
@@ -369,7 +515,11 @@
             a.click();
             a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 5000);
-            flash(cap, `Exported ${rows.length} rows`, true);
+            const apiCount = apiMap ? Object.keys(apiMap).length : 0;
+            const msg = apiCount
+                ? `Exported ${rows.length} rows (+${apiCount} API)`
+                : `Exported ${rows.length} rows`;
+            flash(cap, msg, true);
         } catch (e) {
             console.error('[IWMAC Topology] Export failed', e);
             flash(cap, 'Export failed: ' + (e && e.message ? e.message : e), false, 5000);
