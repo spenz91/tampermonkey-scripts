@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.15
+// @version      1.16
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -537,7 +537,7 @@ ${colsXml}
 
         // The page grid is virtualized — for big plants, many rows aren't in the DOM at scrape time.
         // Append any API rows whose unit_id wasn't found in the scraped tree, grouped by connection_type
-        // under a synthetic "Additional units (from API)" section so they still get the outline structure.
+        // under a synthetic "Additional units" section so they still get the outline structure.
         let addedCount = 0;
         if (apiMap) {
             const scrapedIds = new Set(
@@ -550,7 +550,7 @@ ${colsXml}
                 if (!scrapedIds.has(uid)) missing.push(api);
             }
             if (missing.length) {
-                const groupLabel = 'Additional units (from API)';
+                const groupLabel = 'Additional units';
                 rows.push({ depth: 0, tree: groupLabel, name: '', owner: '', status: '', parent: '' });
                 const byType = {};
                 for (const m of missing) {
