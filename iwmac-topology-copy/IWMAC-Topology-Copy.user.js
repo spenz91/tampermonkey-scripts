@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.16
+// @version      1.17
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -327,10 +327,17 @@
                     connectionType = 'Modbus TCP';
                 }
 
+                // Comm port: prefer API value, otherwise extract the number from "COMx" in the parent.
+                let commPort = api.comm_port || '';
+                if (!commPort) {
+                    const comMatch = parentLbl.match(/\bCOM\s*(\d+)/i);
+                    if (comMatch) commPort = comMatch[1];
+                }
+
                 extra = [
                     connectionType,
                     address,
-                    api.comm_port || '',
+                    commPort,
                     api.baudrate || '',
                     api.parity || '',
                     api.driver_addr || '',
