@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.9
+// @version      1.10
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -297,32 +297,24 @@
             const base = [indentedTree, r.name, r.owner, r.status];
             let extra = ['', '', '', '', '', ''];
             if (hasApi && !isGroup) {
-                const api = apiByUnitId[(r.tree || '').trim().toUpperCase()];
-                if (api) {
-                    let address = api.resolved_address || '';
-                    // Serial Modbus → distinguish Moxa serial-over-IP from physical COM ports
-                    // by inspecting the depth-1 parent label scraped from the page.
-                    const isSerialModbus = !!(api.comm_port && api.comm_port !== '');
-                    if (isSerialModbus) {
-                        // Any IPv4 in the depth-1 parent label → Moxa serial-to-Ethernet converter.
-                        // Otherwise (parent is just "COMx") → physical port.
-                        const parentLbl = r.parent || '';
-                        const ipMatch = parentLbl.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
-                        if (ipMatch) {
-                            address = `Moxa converter (${ipMatch[1]})`;
-                        } else if (/COM\s*\d+/i.test(parentLbl)) {
-                            address = 'Physical port';
-                        }
-                    }
-                    extra = [
-                        api.connection_type || '',
-                        address,
-                        api.comm_port || '',
-                        api.baudrate || '',
-                        api.parity || '',
-                        api.driver_addr || '',
-                    ];
+                const api = apiByUnitId[(r.tree || '').trim().toUpperCase()] || {};
+                // Decide Address from the depth-1 parent label whenever it looks like a COM port.
+                // This works even if the API didn't return comm_port (e.g. driver has no mb_mode setting).
+                let address = api.resolved_address || '';
+                const parentLbl = r.parent || '';
+                const isSerialParent = /\bCOM\s*\d+/i.test(parentLbl);
+                if (isSerialParent) {
+                    const ipMatch = parentLbl.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
+                    address = ipMatch ? `Moxa converter (${ipMatch[1]})` : 'Physical port';
                 }
+                extra = [
+                    api.connection_type || '',
+                    address,
+                    api.comm_port || '',
+                    api.baudrate || '',
+                    api.parity || '',
+                    api.driver_addr || '',
+                ];
             }
             const values = hasApi ? base.concat(extra) : base;
             const cells = values.map((v, i) =>
