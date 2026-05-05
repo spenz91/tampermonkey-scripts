@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.8
+// @version      1.9
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -304,10 +304,13 @@
                     // by inspecting the depth-1 parent label scraped from the page.
                     const isSerialModbus = !!(api.comm_port && api.comm_port !== '');
                     if (isSerialModbus) {
-                        const m = (r.parent || '').match(/COM\d+\s*-\s*(\d{1,3}(?:\.\d{1,3}){3})/i);
-                        if (m) {
-                            address = `Moxa converter (${m[1]})`;
-                        } else if (/^\s*COM\d+/i.test(r.parent || '')) {
+                        // Any IPv4 in the depth-1 parent label → Moxa serial-to-Ethernet converter.
+                        // Otherwise (parent is just "COMx") → physical port.
+                        const parentLbl = r.parent || '';
+                        const ipMatch = parentLbl.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
+                        if (ipMatch) {
+                            address = `Moxa converter (${ipMatch[1]})`;
+                        } else if (/COM\s*\d+/i.test(parentLbl)) {
                             address = 'Physical port';
                         }
                     }
