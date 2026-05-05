@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.12
+// @version      1.13
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -308,15 +308,17 @@
                     address = ipMatch ? `Moxa converter (${ipMatch[1]})` : 'Physical port';
                 }
 
-                // Connection-type overrides:
+                // Connection-type overrides (tree position wins over driver type):
                 //  • Any device under a COMx parent (Moxa or physical) → Modbus RTU
-                //  • Known TCP-only driver types (FX16, …) → Modbus TCP
+                //    (FX16 under a Moxa COM is still RTU — the unit speaks RTU to the Moxa,
+                //     the Moxa is what bridges to TCP.)
+                //  • If NOT under a COM parent, known TCP-only driver types (FX16, …) → Modbus TCP
                 let connectionType = api.connection_type || '';
                 const tcpOnlyDrivers = ['FX16'];
-                if (tcpOnlyDrivers.includes((api.driver_type || '').toUpperCase())) {
-                    connectionType = 'Modbus TCP';
-                } else if (isSerialParent) {
+                if (isSerialParent) {
                     connectionType = 'Modbus RTU';
+                } else if (tcpOnlyDrivers.includes((api.driver_type || '').toUpperCase())) {
+                    connectionType = 'Modbus TCP';
                 }
 
                 extra = [
