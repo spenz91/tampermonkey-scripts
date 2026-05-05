@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.13
+// @version      1.14
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -528,6 +528,46 @@ ${colsXml}
                 flash(cap, 'API failed: ' + (e.message || e) + ' — topology only', false, 4000);
             }
         }
+
+        // The page grid is virtualized — for big plants, many rows aren't in the DOM at scrape time.
+        // Append any API rows whose unit_id wasn't found in the scraped tree, grouped by connection_type
+        // under a synthetic "Additional units (from API)" section so they still get the outline structure.
+        let addedCount = 0;
+        if (apiMap) {
+            const scrapedIds = new Set(
+                rows.filter(r => r.depth >= 2 || r.name || r.owner || r.status)
+                    .map(r => String(r.tree || '').trim().toUpperCase())
+                    .filter(Boolean)
+            );
+            const missing = [];
+            for (const [uid, api] of Object.entries(apiMap)) {
+                if (!scrapedIds.has(uid)) missing.push(api);
+            }
+            if (missing.length) {
+                const groupLabel = 'Additional units (from API)';
+                rows.push({ depth: 0, tree: groupLabel, name: '', owner: '', status: '', parent: '' });
+                const byType = {};
+                for (const m of missing) {
+                    const k = m.connection_type || '(unknown)';
+                    (byType[k] = byType[k] || []).push(m);
+                }
+                for (const ct of Object.keys(byType).sort()) {
+                    rows.push({ depth: 1, tree: ct, name: '', owner: '', status: '', parent: groupLabel });
+                    for (const m of byType[ct].sort((a, b) => String(a.unit_id).localeCompare(String(b.unit_id)))) {
+                        rows.push({
+                            depth: 2,
+                            tree: m.unit_id || '',
+                            name: m.unit_name || '',
+                            owner: m.driver_type || '',
+                            status: '',
+                            parent: ct,
+                        });
+                        addedCount++;
+                    }
+                }
+            }
+        }
+
         try {
             const blob = buildXlsx(rows, apiMap);
             const url = URL.createObjectURL(blob);
@@ -540,10 +580,10 @@ ${colsXml}
             a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 5000);
             const apiCount = apiMap ? Object.keys(apiMap).length : 0;
-            const msg = apiCount
-                ? `Exported ${rows.length} rows (+${apiCount} API)`
-                : `Exported ${rows.length} rows`;
-            flash(cap, msg, true);
+            const parts = [`Exported ${rows.length} rows`];
+            if (apiCount) parts.push(`merged ${apiCount} API`);
+            if (addedCount) parts.push(`+${addedCount} added`);
+            flash(cap, parts.join(', '), true);
         } catch (e) {
             console.error('[IWMAC Topology] Export failed', e);
             flash(cap, 'Export failed: ' + (e && e.message ? e.message : e), false, 5000);
