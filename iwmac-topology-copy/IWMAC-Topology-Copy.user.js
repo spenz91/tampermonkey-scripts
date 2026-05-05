@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.7
+// @version      1.8
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -98,6 +98,7 @@
     function scrapeRows() {
         const rows = document.querySelectorAll('#grid_grid_topology_records tr.w2ui-record');
         const out = [];
+        const lastByDepth = {};
         rows.forEach(tr => {
             const treeCellDiv = tr.querySelector('td[col="0"] > div');
             if (!treeCellDiv) return;
@@ -107,7 +108,9 @@
             const name = tr.querySelector('td[col="1"] > div')?.getAttribute('title') || '';
             const owner = tr.querySelector('td[col="2"] > div')?.getAttribute('title') || '';
             const status = tr.querySelector('td[col="3"] > div')?.textContent.trim() || '';
-            out.push({ depth, tree, name, owner, status });
+            lastByDepth[depth] = tree;
+            const parent = depth > 0 ? (lastByDepth[depth - 1] || '') : '';
+            out.push({ depth, tree, name, owner, status, parent });
         });
         return out;
     }
@@ -296,9 +299,21 @@
             if (hasApi && !isGroup) {
                 const api = apiByUnitId[(r.tree || '').trim().toUpperCase()];
                 if (api) {
+                    let address = api.resolved_address || '';
+                    // Serial Modbus → distinguish Moxa serial-over-IP from physical COM ports
+                    // by inspecting the depth-1 parent label scraped from the page.
+                    const isSerialModbus = !!(api.comm_port && api.comm_port !== '');
+                    if (isSerialModbus) {
+                        const m = (r.parent || '').match(/COM\d+\s*-\s*(\d{1,3}(?:\.\d{1,3}){3})/i);
+                        if (m) {
+                            address = `Moxa converter (${m[1]})`;
+                        } else if (/^\s*COM\d+/i.test(r.parent || '')) {
+                            address = 'Physical port';
+                        }
+                    }
                     extra = [
                         api.connection_type || '',
-                        api.resolved_address || '',
+                        address,
                         api.comm_port || '',
                         api.baudrate || '',
                         api.parity || '',
