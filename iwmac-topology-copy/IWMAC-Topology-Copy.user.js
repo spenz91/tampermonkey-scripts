@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.14
+// @version      1.15
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -298,14 +298,20 @@
             let extra = ['', '', '', '', '', ''];
             if (hasApi && !isGroup) {
                 const api = apiByUnitId[(r.tree || '').trim().toUpperCase()] || {};
-                // Decide Address from the depth-1 parent label whenever it looks like a COM port.
-                // This works even if the API didn't return comm_port (e.g. driver has no mb_mode setting).
+                // Decide Address from the depth-1 parent label whenever the page tree gives us
+                // network info there. Falls back to api.resolved_address otherwise.
+                //   • Parent is "COMx - IP"  → Moxa converter (IP)
+                //   • Parent is "COMx"       → Physical port
+                //   • Parent contains an IP  → use IP[:port] from the parent (covers BACnet groupings)
                 let address = api.resolved_address || '';
                 const parentLbl = r.parent || '';
                 const isSerialParent = /\bCOM\s*\d+/i.test(parentLbl);
                 if (isSerialParent) {
                     const ipMatch = parentLbl.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
                     address = ipMatch ? `Moxa converter (${ipMatch[1]})` : 'Physical port';
+                } else {
+                    const ipPortMatch = parentLbl.match(/\b(\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?)\b/);
+                    if (ipPortMatch) address = ipPortMatch[1];
                 }
 
                 // Connection-type overrides (tree position wins over driver type):
