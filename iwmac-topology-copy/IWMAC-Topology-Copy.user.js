@@ -2,7 +2,7 @@
 // @name         IWMAC Topology Copy
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.10
+// @version      1.11
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
 // @grant        GM_setClipboard
@@ -307,8 +307,20 @@
                     const ipMatch = parentLbl.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
                     address = ipMatch ? `Moxa converter (${ipMatch[1]})` : 'Physical port';
                 }
+
+                // Connection-type overrides:
+                //  • Physical COM port → always Modbus RTU
+                //  • Known TCP-only driver types (FX16, …) → Modbus TCP
+                let connectionType = api.connection_type || '';
+                const tcpOnlyDrivers = ['FX16'];
+                if (tcpOnlyDrivers.includes((api.driver_type || '').toUpperCase())) {
+                    connectionType = 'Modbus TCP';
+                } else if (address === 'Physical port') {
+                    connectionType = 'Modbus RTU';
+                }
+
                 extra = [
-                    api.connection_type || '',
+                    connectionType,
                     address,
                     api.comm_port || '',
                     api.baudrate || '',
