@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      7.9
+// @version      8.0
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -112,6 +112,38 @@
                 }
                 if (Date.now() - start > timeout) return reject(new Error('timeout text: ' + text));
                 setTimeout(tick, 500);
+            };
+            tick();
+        });
+    }
+
+    // Continuously poll for the "Lagre ip-adresser" button. The HTTPS test can
+    // take a while to render the Save button on slow plants, so we poll every
+    // 250ms up to `totalMs` and log a heartbeat every ~3s so the user can see
+    // we're still looking. Returns the element or null on timeout.
+    function waitForIpSaveButton(totalMs, label) {
+        return new Promise((resolve) => {
+            const start = Date.now();
+            let lastBeat = 0;
+            const tick = () => {
+                const el = document.querySelector('button#ipSave');
+                if (el) {
+                    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+                    log((label || 'ipSave button search') + ' — found in ' + elapsed + 's');
+                    return resolve(el);
+                }
+                const now = Date.now();
+                if (now - lastBeat >= 3000) {
+                    lastBeat = now;
+                    const secs = ((now - start) / 1000).toFixed(0);
+                    log((label || 'ipSave button search') + ' — still looking (' + secs + 's elapsed)');
+                }
+                if (now - start > totalMs) {
+                    const elapsed = ((now - start) / 1000).toFixed(1);
+                    log((label || 'ipSave button search') + ' — gave up after ' + elapsed + 's');
+                    return resolve(null);
+                }
+                setTimeout(tick, 250);
             };
             tick();
         });
@@ -460,18 +492,9 @@
                         enableButton(ipFormBtn0);
                         clickEl(ipFormBtn0, 'Test tilkobling til AK-SM850');
                     }
-                    await sleepLogged(2500, 'waiting for HTTPS test result');
-
-                    // Double-check: poll for the Save button a few times before deciding HTTPS failed.
-                    let saveBtn = document.querySelector('button#ipSave');
-                    if (!saveBtn) {
-                        log('Save button not found yet after HTTPS test — double-checking...');
-                        for (let dc = 1; dc <= 3 && !saveBtn; dc++) {
-                            await sleepLogged(2000, 'double-check ' + dc + '/3 for ipSave button (HTTPS)');
-                            saveBtn = document.querySelector('button#ipSave');
-                        }
-                        if (saveBtn) log('Save button appeared on double-check (HTTPS) — proceeding');
-                    }
+                    // Poll continuously for up to 20s — slow plants can take a
+                    // while to render the Save button after the HTTPS test.
+                    let saveBtn = await waitForIpSaveButton(20000, 'ipSave after HTTPS test');
 
                     // If Save button still isn't there, HTTPS probably failed the test.
                     // Force HTTPS off, re-click Test tilkobling (up to 5 retries), look again.
@@ -498,23 +521,13 @@
                                 if (form && typeof form.requestSubmit === 'function') form.requestSubmit(ipFormBtn);
                                 else if (form) form.submit();
                             } catch (e) { log('form submit fallback failed: ' + e.message); }
-                            const waitMs = attempt === 1 ? 6000 : attempt === 2 ? 8000 : 10000;
-                            await sleepLogged(waitMs, 'waiting for test result (retry ' + attempt + ')');
-                            saveBtn = document.querySelector('button#ipSave');
-                            if (!saveBtn) {
-                                log('Save button not found after HTTP retry ' + attempt + ' — double-checking...');
-                                for (let dc = 1; dc <= 3 && !saveBtn; dc++) {
-                                    await sleepLogged(2000, 'double-check ' + dc + '/3 for ipSave button (HTTP retry ' + attempt + ')');
-                                    saveBtn = document.querySelector('button#ipSave');
-                                }
-                                if (saveBtn) log('Save button appeared on double-check (HTTP retry ' + attempt + ')');
-                                else log('Still no Save button after double-check (HTTP retry ' + attempt + ')');
-                            }
+                            const waitMs = attempt === 1 ? 20000 : attempt === 2 ? 25000 : 30000;
+                            saveBtn = await waitForIpSaveButton(waitMs, 'ipSave after HTTP retry ' + attempt);
                         }
                     }
                     if (!saveBtn) {
-                        try { saveBtn = await waitFor('button#ipSave', { timeout: 5000 }); }
-                        catch { fail('Save button (ipSave) did not appear after test'); }
+                        saveBtn = await waitForIpSaveButton(15000, 'ipSave final wait');
+                        if (!saveBtn) fail('Save button (ipSave) did not appear after test');
                     }
                     // Re-query to get a fresh DOM reference right before clicking.
                     saveBtn = document.querySelector('button#ipSave') || saveBtn;
@@ -553,16 +566,8 @@
                             enableButton(b);
                             clickEl(b, 'Test tilkobling til AK-SM850 (retry)');
                         }
-                        await sleepLogged(2500, 'waiting for test result (retry)');
-                        let saveBtn2 = document.querySelector('button#ipSave');
-                        if (!saveBtn2) {
-                            log('Save button not found after retry test — double-checking...');
-                            for (let dc = 1; dc <= 3 && !saveBtn2; dc++) {
-                                await sleepLogged(2000, 'double-check ' + dc + '/3 for ipSave button (save retry)');
-                                saveBtn2 = document.querySelector('button#ipSave');
-                            }
-                            if (!saveBtn2) saveBtn2 = await waitFor('button#ipSave', { timeout: 10000 });
-                        }
+                        let saveBtn2 = await waitForIpSaveButton(25000, 'ipSave after save-retry test');
+                        if (!saveBtn2) saveBtn2 = await waitFor('button#ipSave', { timeout: 15000 });
                         saveBtn2 = document.querySelector('button#ipSave') || saveBtn2;
                         log('Save button confirmed present (retry) — enabling and clicking');
                         enableButton(saveBtn2);
