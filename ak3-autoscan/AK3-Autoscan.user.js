@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      8.2
+// @version      8.3
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -161,6 +161,47 @@
             log((label || 'ipSave click') + ' — attempt ' + i + ' did not confirm yet, will retry');
         }
         return false;
+    }
+
+    // True when the remoteIp input has the 'invalid' class (red border on the
+    // page) — a fast indicator that the connection test failed and we should
+    // try again with HTTPS off instead of waiting for the Save button.
+    function isRemoteIpInvalid() {
+        const el = document.querySelector('input#remoteIp');
+        return !!(el && el.classList && el.classList.contains('invalid'));
+    }
+
+    // Wait for either the visible Save button OR remoteIp.invalid, whichever
+    // comes first. Returns { kind: 'save', el } | { kind: 'invalid' } | { kind: 'timeout' }.
+    function waitForSaveOrInvalid(totalMs, label) {
+        return new Promise((resolve) => {
+            const start = Date.now();
+            let lastBeat = 0;
+            const tick = () => {
+                const el = findVisibleIpSave();
+                if (el) {
+                    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+                    log((label || 'save/invalid watch') + ' — Save button found in ' + elapsed + 's');
+                    return resolve({ kind: 'save', el });
+                }
+                if (isRemoteIpInvalid()) {
+                    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+                    log((label || 'save/invalid watch') + ' — remoteIp marked invalid after ' + elapsed + 's');
+                    return resolve({ kind: 'invalid' });
+                }
+                const now = Date.now();
+                if (now - lastBeat >= 3000) {
+                    lastBeat = now;
+                    log((label || 'save/invalid watch') + ' — still watching (' + ((now - start) / 1000).toFixed(0) + 's)');
+                }
+                if (now - start > totalMs) {
+                    log((label || 'save/invalid watch') + ' — timed out after ' + ((now - start) / 1000).toFixed(1) + 's');
+                    return resolve({ kind: 'timeout' });
+                }
+                setTimeout(tick, 250);
+            };
+            tick();
+        });
     }
 
     function findVisibleIpSave() {
@@ -552,7 +593,12 @@
                     }
                     // Poll continuously for up to 20s — slow plants can take a
                     // while to render the Save button after the HTTPS test.
-                    let saveBtn = await waitForIpSaveButton(60000, 'ipSave after HTTPS test');
+                    let saveBtn = null;
+                    {
+                        const r = await waitForSaveOrInvalid(60000, 'ipSave/invalid after HTTPS test');
+                        if (r.kind === 'save') saveBtn = r.el;
+                        else if (r.kind === 'invalid') log('remoteIp invalid → HTTPS test failed, will disable HTTPS and retry');
+                    }
 
                     // If Save button still isn't there, HTTPS probably failed the test.
                     // Force HTTPS off, re-click Test tilkobling (up to 5 retries), look again.
@@ -584,7 +630,9 @@
                                 else if (form) form.submit();
                             } catch (e) { log('form submit fallback failed: ' + e.message); }
                             const waitMs = attempt === 1 ? 20000 : attempt === 2 ? 25000 : 30000;
-                            saveBtn = await waitForIpSaveButton(waitMs, 'ipSave after HTTP retry ' + attempt);
+                            const r = await waitForSaveOrInvalid(waitMs, 'ipSave/invalid after HTTP retry ' + attempt);
+                            if (r.kind === 'save') saveBtn = r.el;
+                            else if (r.kind === 'invalid') log('remoteIp invalid on HTTP retry ' + attempt + ' — will retry');
                         }
                     }
                     if (!saveBtn) {
