@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      8.1
+// @version      8.2
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -121,6 +121,48 @@
     // take a while to render the Save button on slow plants, so we poll every
     // 250ms up to `totalMs` and log a heartbeat every ~3s so the user can see
     // we're still looking. Returns the element or null on timeout.
+    // Click the visible #ipSave button repeatedly until either #message contains
+    // "IPer oppdatert" or we run out of attempts. The button can re-render after
+    // each test/click, so we re-query every iteration. Returns true on success.
+    async function clickIpSaveUntilConfirmed(maxAttempts, label) {
+        for (let i = 1; i <= maxAttempts; i++) {
+            const btn = findVisibleIpSave();
+            if (!btn) {
+                log((label || 'ipSave click') + ' — attempt ' + i + '/' + maxAttempts + ': button not visible, polling 5s');
+                const reappeared = await waitForIpSaveButton(5000, 'ipSave re-find for click ' + i);
+                if (!reappeared) continue;
+            }
+            const target = findVisibleIpSave();
+            if (!target) continue;
+            enableButton(target);
+            try { target.scrollIntoView({ behavior: 'instant', block: 'center' }); } catch (e) {}
+            await sleep(150);
+            clickEl(target, (label || 'Lagre ip-adresser') + ' (click ' + i + '/' + maxAttempts + ')');
+            try {
+                const jq = window.jQuery || window.$;
+                if (jq && typeof jq === 'function') jq('#ipSave').trigger('click');
+            } catch (e) {}
+            try {
+                const form = target.closest('form');
+                if (form && typeof form.requestSubmit === 'function') form.requestSubmit(target);
+                else if (form) form.submit();
+            } catch (e) { log('ipSave form submit fallback: ' + e.message); }
+            // Wait briefly for confirmation between clicks; total wait grows over attempts.
+            const perClickWait = 4000;
+            const start = Date.now();
+            while (Date.now() - start < perClickWait) {
+                const msg = document.querySelector('#message');
+                if (msg && msg.textContent.includes('IPer oppdatert')) {
+                    log((label || 'ipSave click') + ' — confirmed after ' + i + ' click(s)');
+                    return true;
+                }
+                await sleep(250);
+            }
+            log((label || 'ipSave click') + ' — attempt ' + i + ' did not confirm yet, will retry');
+        }
+        return false;
+    }
+
     function findVisibleIpSave() {
         // There can be more than one #ipSave in the DOM (templates, hidden forms).
         // Pick a visible one, preferring the one whose inline style indicates
@@ -549,32 +591,8 @@
                         saveBtn = await waitForIpSaveButton(15000, 'ipSave final wait');
                         if (!saveBtn) fail('Save button (ipSave) did not appear after test');
                     }
-                    // Re-query to get a fresh DOM reference right before clicking.
-                    saveBtn = findVisibleIpSave() || saveBtn;
-                    log('Save button confirmed present — enabling and clicking');
-                    enableButton(saveBtn);
-                    saveBtn.scrollIntoView({ behavior: 'instant', block: 'center' });
-                    await sleep(300);
-                    clickEl(saveBtn, 'Lagre ip-adresser i scanner database');
-                    // Fallback: also trigger via jQuery and form submit in case click didn't register.
-                    try {
-                        const jq = window.jQuery || window.$;
-                        if (jq && typeof jq === 'function') jq('#ipSave').trigger('click');
-                    } catch (e) {}
-                    try {
-                        const form = saveBtn.closest('form');
-                        if (form && typeof form.requestSubmit === 'function') form.requestSubmit(saveBtn);
-                        else if (form) form.submit();
-                    } catch (e) { log('ipSave form submit fallback: ' + e.message); }
-
-                    let ok = false;
-                    try {
-                        log('Waiting for "IPer oppdatert" confirmation');
-                        await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 30000 },
-                            'waiting for IPer oppdatert');
-                        log('IP addresses confirmed updated');
-                        ok = true;
-                    } catch {}
+                    log('Save button confirmed present — clicking up to 8 times until IPer oppdatert');
+                    let ok = await clickIpSaveUntilConfirmed(8, 'Lagre ip-adresser i scanner database');
 
                     if (!ok) {
                         log('First save did not confirm — retrying with HTTPS off');
@@ -588,27 +606,16 @@
                         }
                         let saveBtn2 = await waitForIpSaveButton(25000, 'ipSave after save-retry test');
                         if (!saveBtn2) saveBtn2 = await waitFor('button#ipSave', { timeout: 15000 });
-                        saveBtn2 = findVisibleIpSave() || saveBtn2;
-                        log('Save button confirmed present (retry) — enabling and clicking');
-                        enableButton(saveBtn2);
-                        saveBtn2.scrollIntoView({ behavior: 'instant', block: 'center' });
-                        await sleep(300);
-                        clickEl(saveBtn2, 'Lagre ip-adresser (retry)');
-                        try {
-                            const jq = window.jQuery || window.$;
-                            if (jq && typeof jq === 'function') jq('#ipSave').trigger('click');
-                        } catch (e) {}
-                        try {
-                            const form = saveBtn2.closest('form');
-                            if (form && typeof form.requestSubmit === 'function') form.requestSubmit(saveBtn2);
-                            else if (form) form.submit();
-                        } catch (e) { log('ipSave form submit fallback (retry): ' + e.message); }
-                        try {
-                            await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 30000 },
-                                'waiting for IPer oppdatert (retry)');
-                            log('IP addresses confirmed updated (retry)');
-                            ok = true;
-                        } catch {}
+                        log('Save button confirmed present (retry) — clicking up to 8 times');
+                        ok = await clickIpSaveUntilConfirmed(8, 'Lagre ip-adresser (retry)');
+                        if (!ok) {
+                            try {
+                                await waitForTextLogged('#message', 'IPer oppdatert', { timeout: 30000 },
+                                    'waiting for IPer oppdatert (retry)');
+                                log('IP addresses confirmed updated (retry)');
+                                ok = true;
+                            } catch {}
+                        }
                     }
                     if (!ok) {
                         log('Automatic IP setup failed — waiting for user to fix manually');
