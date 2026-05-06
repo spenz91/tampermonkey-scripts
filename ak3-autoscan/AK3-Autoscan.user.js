@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      8.3
+// @version      8.4
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -190,10 +190,6 @@
                     return resolve({ kind: 'invalid' });
                 }
                 const now = Date.now();
-                if (now - lastBeat >= 3000) {
-                    lastBeat = now;
-                    log((label || 'save/invalid watch') + ' — still watching (' + ((now - start) / 1000).toFixed(0) + 's)');
-                }
                 if (now - start > totalMs) {
                     log((label || 'save/invalid watch') + ' — timed out after ' + ((now - start) / 1000).toFixed(1) + 's');
                     return resolve({ kind: 'timeout' });
@@ -232,11 +228,6 @@
                     return resolve(el);
                 }
                 const now = Date.now();
-                if (now - lastBeat >= 3000) {
-                    lastBeat = now;
-                    const secs = ((now - start) / 1000).toFixed(0);
-                    log((label || 'ipSave button search') + ' — still looking (' + secs + 's elapsed)');
-                }
                 if (now - start > totalMs) {
                     const elapsed = ((now - start) / 1000).toFixed(1);
                     log((label || 'ipSave button search') + ' — gave up after ' + elapsed + 's');
@@ -624,11 +615,9 @@
                             if (ipFormBtn.disabled) log('ipForm still reports disabled after enable');
                             clickEl(ipFormBtn,
                                     'Test tilkobling til AK-SM850 (retry ' + attempt + ', HTTPS off)');
-                            try {
-                                const form = ipFormBtn.closest('form');
-                                if (form && typeof form.requestSubmit === 'function') form.requestSubmit(ipFormBtn);
-                                else if (form) form.submit();
-                            } catch (e) { log('form submit fallback failed: ' + e.message); }
+                            // NOTE: do NOT call form.submit() here — Test tilkobling is
+                            // AJAX-only; submitting the form caused a real POST/navigation
+                            // that reloaded the page back to the start of the workflow.
                             const waitMs = attempt === 1 ? 20000 : attempt === 2 ? 25000 : 30000;
                             const r = await waitForSaveOrInvalid(waitMs, 'ipSave/invalid after HTTP retry ' + attempt);
                             if (r.kind === 'save') saveBtn = r.el;
