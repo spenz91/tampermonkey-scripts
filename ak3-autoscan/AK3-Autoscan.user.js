@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      8.0
+// @version      8.1
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -121,15 +121,31 @@
     // take a while to render the Save button on slow plants, so we poll every
     // 250ms up to `totalMs` and log a heartbeat every ~3s so the user can see
     // we're still looking. Returns the element or null on timeout.
+    function findVisibleIpSave() {
+        // There can be more than one #ipSave in the DOM (templates, hidden forms).
+        // Pick a visible one, preferring the one whose inline style indicates
+        // pointer-events:auto / opacity:1 (the "ready to click" state shown after
+        // a successful Test tilkobling).
+        const all = document.querySelectorAll('button#ipSave, #ipSave');
+        let firstVisible = null;
+        for (const el of all) {
+            if (el.tagName.toLowerCase() !== 'button') continue;
+            if (el.offsetParent === null) continue; // hidden
+            const cs = el.style;
+            if (cs && cs.pointerEvents === 'auto' && cs.opacity === '1') return el;
+            if (!firstVisible) firstVisible = el;
+        }
+        return firstVisible;
+    }
     function waitForIpSaveButton(totalMs, label) {
         return new Promise((resolve) => {
             const start = Date.now();
             let lastBeat = 0;
             const tick = () => {
-                const el = document.querySelector('button#ipSave');
+                const el = findVisibleIpSave();
                 if (el) {
                     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-                    log((label || 'ipSave button search') + ' — found in ' + elapsed + 's');
+                    log((label || 'ipSave button search') + ' — found in ' + elapsed + 's (' + describe(el) + ')');
                     return resolve(el);
                 }
                 const now = Date.now();
@@ -494,7 +510,7 @@
                     }
                     // Poll continuously for up to 20s — slow plants can take a
                     // while to render the Save button after the HTTPS test.
-                    let saveBtn = await waitForIpSaveButton(20000, 'ipSave after HTTPS test');
+                    let saveBtn = await waitForIpSaveButton(60000, 'ipSave after HTTPS test');
 
                     // If Save button still isn't there, HTTPS probably failed the test.
                     // Force HTTPS off, re-click Test tilkobling (up to 5 retries), look again.
@@ -511,6 +527,10 @@
                             log('HTTPS checkbox forced off (checked=' + h.checked + ')');
                         }
                         for (let attempt = 1; attempt <= 5 && !saveBtn; attempt++) {
+                            // Short-circuit: maybe the button appeared between the
+                            // last poll and now — don't re-submit Test if it's there.
+                            saveBtn = findVisibleIpSave();
+                            if (saveBtn) { log('ipSave appeared just before retry ' + attempt + ' — skipping re-test'); break; }
                             const ipFormBtn = await waitFor('input#ipForm');
                             enableButton(ipFormBtn);
                             if (ipFormBtn.disabled) log('ipForm still reports disabled after enable');
@@ -530,7 +550,7 @@
                         if (!saveBtn) fail('Save button (ipSave) did not appear after test');
                     }
                     // Re-query to get a fresh DOM reference right before clicking.
-                    saveBtn = document.querySelector('button#ipSave') || saveBtn;
+                    saveBtn = findVisibleIpSave() || saveBtn;
                     log('Save button confirmed present — enabling and clicking');
                     enableButton(saveBtn);
                     saveBtn.scrollIntoView({ behavior: 'instant', block: 'center' });
@@ -568,7 +588,7 @@
                         }
                         let saveBtn2 = await waitForIpSaveButton(25000, 'ipSave after save-retry test');
                         if (!saveBtn2) saveBtn2 = await waitFor('button#ipSave', { timeout: 15000 });
-                        saveBtn2 = document.querySelector('button#ipSave') || saveBtn2;
+                        saveBtn2 = findVisibleIpSave() || saveBtn2;
                         log('Save button confirmed present (retry) — enabling and clicking');
                         enableButton(saveBtn2);
                         saveBtn2.scrollIntoView({ behavior: 'instant', block: 'center' });
