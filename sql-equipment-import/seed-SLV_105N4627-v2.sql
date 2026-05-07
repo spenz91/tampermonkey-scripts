@@ -1,7 +1,7 @@
 -- Paste-ready: import SLV_105N4627-v2.sql into sql_equipment_import.templates
 -- Run on the Toolbox MariaDB (HeidiSQL / mysql / local phpMyAdmin).
 
-REPLACE INTO `sql_equipment_import`.`templates` (`name`, `display_name`, `driver_type`, `sql_text`) VALUES (
+REPLACE INTO `sql_equipment_import`.`templates` (`name`, `display_name`, `driver_type`, `sql_text`, `created_at`) VALUES (
   'SLV_105N4627-v2',
   'SLV 105N4627 v2',
   'SLV',
@@ -418,5 +418,6 @@ REPLACE INTO `iw_set_slv_105n4627_v02_xx` (`row_date`, `element_id`, `active`, `
 -- v1 Orginal
 -- v2 Total rewrite of whole parameterlist. All parameters is now included with Json. Is 100% compatible with old list - design and everything.
 --
-'
+',
+  NOW()
 );

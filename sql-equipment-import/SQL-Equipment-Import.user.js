@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      2.0
+// @version      2.1
 // @description  Floating panel on phpMyAdmin that fetches equipment-import SQL templates from the Toolbox MariaDB (via toolbox-sql API), lets you edit unit rows + Modbus settings (RTU/TCP, multi-IP), and emits the full SQL ready to paste.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -570,8 +570,8 @@
         try {
             $st.textContent = 'Saving…';
             await sqlExec(
-                `REPLACE INTO ${DB}.templates (name, display_name, driver_type, sql_text) VALUES (` +
-                `${q(name)}, ${q(disp)}, ${q(drv)}, ${q(sql)})`
+                `REPLACE INTO ${DB}.templates (name, display_name, driver_type, sql_text, created_at) VALUES (` +
+                `${q(name)}, ${q(disp)}, ${q(drv)}, ${q(sql)}, NOW())`
             );
             $st.innerHTML = '<span class="ok">Saved.</span>';
             refreshTemplateList(); checkConnAndLoad();
