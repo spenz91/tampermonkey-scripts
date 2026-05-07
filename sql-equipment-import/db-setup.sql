@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS `sql_equipment_import`.`templates` (
   `driver_type`  VARCHAR(50)  NOT NULL,           -- e.g. "SLV", "OJEXHAUST"
   `sql_text`     MEDIUMTEXT   NOT NULL,           -- full template SQL
   `notes`        TEXT,
-  `created_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  -- DATETIME (not TIMESTAMP) on both columns: older MariaDB allows only one
+  -- TIMESTAMP column with CURRENT_TIMESTAMP defaults (#1293).
+  `created_at`   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
