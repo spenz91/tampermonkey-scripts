@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.3
+// @version      3.4
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -194,11 +194,7 @@
         panel.classList.toggle('collapsed', c);
         $('seii-collapse').textContent = c ? '▸' : '▾';
     }
-    $('seii-collapse').onclick = (e) => { e.stopPropagation(); setCollapsed(!panel.classList.contains('collapsed')); };
-    panel.querySelector('.hdr').addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON') return;
-        setCollapsed(!panel.classList.contains('collapsed'));
-    });
+    $('seii-collapse').onclick = () => setCollapsed(!panel.classList.contains('collapsed'));
 
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
