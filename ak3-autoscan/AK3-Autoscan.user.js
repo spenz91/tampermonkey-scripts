@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AK3 Auto Scan
-// @version      8.4
+// @version      8.5
 // @description  Automate AK3 scanner setup workflow
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
@@ -310,8 +310,11 @@
         catch (e) { log('pma_local log failed (non-fatal): ' + e.message); }
     }
 
+    const _pmaLocalLogged = new Set();
     async function logPmaLocal(plantId) {
         ensureRunIdForPlant(plantId);
+        if (_pmaLocalLogged.has(String(plantId))) { log('pma_local already logged this session, skipping'); return; }
+        _pmaLocalLogged.add(String(plantId));
         const payload = [{
             jsonrpc: '2.0', method: 'log',
             params: { plant_id: String(plantId), action: 'pma_local' },
