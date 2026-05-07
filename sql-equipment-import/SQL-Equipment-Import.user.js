@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.1
+// @version      3.2
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -26,7 +26,7 @@
         ['0', 'N (None)'], ['1', 'O (Odd)'], ['2', 'E (Even)'],
         ['3', 'M (Mark)'], ['4', 'S (Space)'],
     ];
-    const MB_MODE_OPTS = [['0', 'RTU'], ['1', 'ASCII'], ['2', 'TCP'], ['3', 'TCP (alt)']];
+    const MB_MODE_OPTS = [['0', 'RTU'], ['2', 'TCP']];
 
     // ---------------- SQL helpers ----------------
     const sqlEsc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "''");
@@ -338,7 +338,7 @@
 
     function syncTcpVisible() {
         const v = $('seii-set-mb_mode') ? $('seii-set-mb_mode').value : '0';
-        $('seii-tcpwrap').style.display = (v === '2' || v === '3') ? '' : 'none';
+        $('seii-tcpwrap').style.display = v === '2' ? '' : 'none';
     }
 
     // ---------- Generate output ----------
@@ -360,7 +360,7 @@
             if (el) settingsValues[k] = el.value.trim();
         }
         const owner = (CURRENT.settings && CURRENT.settings.owner) || '';
-        const isTcp = settingsValues.mb_mode === '2' || settingsValues.mb_mode === '3';
+        const isTcp = settingsValues.mb_mode === '2';
         const ips = [...document.querySelectorAll('.seii-ip')].map(i => i.value.trim()).filter(Boolean);
         const tcpServers = ips.map((ip, i) => `${i + 1};${ip};502;1000;2;1000`).join('\\r\\n') + (ips.length ? '\\r\\n' : '');
 
