@@ -2,12 +2,14 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.0
-// @description  Floating panel on phpMyAdmin: load a driver-template .sql from disk, edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
+// @version      3.1
+// @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
 // @run-at       document-end
 // @grant        GM_setClipboard
+// @grant        GM_xmlhttpRequest
+// @connect      raw.githubusercontent.com
 // @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js
 // @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js
 // ==/UserScript==
@@ -17,6 +19,8 @@
     if (window.top !== window) return;
 
     // ---------------- Config ----------------
+    const REPO_BASE = 'https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/templates';
+    const MANIFEST_URL = REPO_BASE + '/manifest.json';
     const EDITABLE_SETTINGS = ['mb_mode', 'comm_baudrate', 'comm_parity'];
     const PARITY_OPTS = [
         ['0', 'N (None)'], ['1', 'O (Odd)'], ['2', 'E (Even)'],
@@ -27,6 +31,23 @@
     // ---------------- SQL helpers ----------------
     const sqlEsc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "''");
     const q = (v) => "'" + sqlEsc(v) + "'";
+
+    // ---------------- HTTP (GitHub raw) ----------------
+    function gmFetch(url) {
+        return new Promise((resolve, reject) => {
+            // cache-buster so freshly-pushed files are visible immediately
+            const u = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
+            GM_xmlhttpRequest({
+                method: 'GET', url: u, timeout: 30000,
+                onload: r => {
+                    if (r.status >= 200 && r.status < 300) resolve(r.responseText);
+                    else reject(new Error(`HTTP ${r.status} fetching ${url}`));
+                },
+                onerror: () => reject(new Error('Network error fetching ' + url)),
+                ontimeout: () => reject(new Error('Timeout fetching ' + url)),
+            });
+        });
+    }
 
     function extractTuples(s) {
         const out = []; let i = 0, depth = 0, start = -1, inStr = false;
@@ -119,9 +140,15 @@
         <span><button id="seii-hide" title="Hide">×</button></span>
       </div>
       <div class="body">
-        <label>Driver template (.sql file)</label>
+        <label>Driver template <span class="small">(from GitHub repo)</span></label>
+        <div class="row">
+          <select id="seii-tpl" style="flex:1"><option value="">— loading… —</option></select>
+          <button id="seii-reload" title="Reload manifest" style="padding:2px 8px;cursor:pointer">↻</button>
+        </div>
+
+        <label class="small" style="margin-top:8px">…or load a .sql from disk</label>
         <input type="file" id="seii-file" accept=".sql,text/plain">
-        <div id="seii-fileinfo" class="small">Pick a driver SQL from disk to begin.</div>
+        <div id="seii-fileinfo" class="small">Pick a template above, or load a file from disk.</div>
 
         <div id="seii-form" style="display:none">
           <label>Unit rows <span class="small">(rename / add / remove)</span></label>
@@ -178,23 +205,58 @@
 
     // ---------- Template state ----------
     let CURRENT = null; // { name, sqlText, units, settings }
+    let MANIFEST = []; // [{name, display_name, driver_type, file}]
+
+    function loadSqlText(name, sqlText) {
+        CURRENT = { name, sqlText };
+        CURRENT.units = parseBlock(sqlText, 'iw_sys_plant_units');
+        CURRENT.settings = parseBlock(sqlText, 'iw_sys_plant_settings');
+        $('seii-fileinfo').innerHTML =
+            `<span class="ok">Loaded ${escapeHtml(name)}</span> ` +
+            `<span class="small">(${sqlText.length} bytes, ${CURRENT.units ? CURRENT.units.rows.length : 0} unit rows)</span>`;
+        renderForm();
+        $('seii-form').style.display = '';
+        $('seii-out').value = '';
+        $('seii-status').textContent = '';
+    }
+
+    async function loadManifest() {
+        const sel = $('seii-tpl');
+        sel.innerHTML = '<option value="">— loading… —</option>';
+        try {
+            const txt = await gmFetch(MANIFEST_URL);
+            const json = JSON.parse(txt);
+            MANIFEST = (json && json.templates) || [];
+            sel.innerHTML = '<option value="">— pick template —</option>' +
+                MANIFEST.map((t, i) => `<option value="${i}">${escapeHtml(t.display_name)} (${escapeHtml(t.driver_type)})</option>`).join('');
+            $('seii-fileinfo').innerHTML = `<span class="ok">${MANIFEST.length} templates available.</span> Pick one above, or load from disk.`;
+        } catch (e) {
+            sel.innerHTML = '<option value="">— manifest load failed —</option>';
+            $('seii-fileinfo').innerHTML = `<span class="err">Manifest load failed: ${escapeHtml(e.message)}.</span> You can still load a .sql from disk below.`;
+        }
+    }
+
+    $('seii-reload').onclick = (e) => { e.preventDefault(); loadManifest(); };
+
+    $('seii-tpl').onchange = async () => {
+        const idx = $('seii-tpl').value;
+        if (idx === '') return;
+        const t = MANIFEST[+idx]; if (!t) return;
+        $('seii-fileinfo').textContent = 'Fetching ' + t.file + '…';
+        try {
+            const txt = await gmFetch(REPO_BASE + '/' + encodeURIComponent(t.file));
+            loadSqlText(t.file, txt);
+        } catch (e) {
+            $('seii-fileinfo').innerHTML = `<span class="err">Fetch failed: ${escapeHtml(e.message)}</span>`;
+        }
+    };
+
+    loadManifest();
 
     $('seii-file').addEventListener('change', e => {
         const f = e.target.files[0]; if (!f) return;
         const fr = new FileReader();
-        fr.onload = () => {
-            const txt = fr.result;
-            CURRENT = { name: f.name, sqlText: txt };
-            CURRENT.units = parseBlock(txt, 'iw_sys_plant_units');
-            CURRENT.settings = parseBlock(txt, 'iw_sys_plant_settings');
-            $('seii-fileinfo').innerHTML =
-                `<span class="ok">Loaded ${escapeHtml(f.name)}</span> ` +
-                `<span class="small">(${txt.length} bytes, ${CURRENT.units ? CURRENT.units.rows.length : 0} unit rows)</span>`;
-            renderForm();
-            $('seii-form').style.display = '';
-            $('seii-out').value = '';
-            $('seii-status').textContent = '';
-        };
+        fr.onload = () => loadSqlText(f.name, fr.result);
         fr.readAsText(f);
     });
 

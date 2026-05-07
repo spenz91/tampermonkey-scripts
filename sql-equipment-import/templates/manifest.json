@@ -1,0 +1,11 @@
+{
+  "$schema_comment": "Drop a .sql template into this folder, then add an entry below. The userscript fetches this manifest at startup and shows display_name in its dropdown.",
+  "templates": [
+    {
+      "name": "SLV_105N4627-v2",
+      "display_name": "SLV 105N4627 v2",
+      "driver_type": "SLV",
+      "file": "SLV_105N4627-v2.sql"
+    }
+  ]
+}
