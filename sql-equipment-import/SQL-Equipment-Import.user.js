@@ -1,15 +1,15 @@
 // ==UserScript==
-// @name         AK3 SQL Equipment Builder
+// @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.0
+// @version      1.1
 // @description  Floating panel on phpMyAdmin to generate the SQL for adding a new equipment unit (iw_sys_plant_units + iw_sys_plant_settings), incl. multi-IP Modbus-TCP.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
 // @run-at       document-end
 // @grant        GM_setClipboard
-// @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/ak3-sql-builder/AK3-SQL-Builder.user.js
-// @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/ak3-sql-builder/AK3-SQL-Builder.user.js
+// @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js
+// @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js
 // ==/UserScript==
 
 (function () {
@@ -72,7 +72,7 @@
     panel.id = 'ak3sb-panel';
     panel.innerHTML = `
         <div class="hdr">
-            <b>AK3 SQL Equipment Builder</b>
+            <b>SQL Equipment Import</b>
             <button id="ak3sb-hide" title="Hide">×</button>
         </div>
         <div class="body">

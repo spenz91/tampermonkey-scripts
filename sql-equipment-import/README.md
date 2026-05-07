@@ -1,15 +1,15 @@
-# AK3 SQL Equipment Builder
+# SQL Equipment Import
 
 A floating panel that overlays the phpMyAdmin frameset on IWMAC plant servers and generates the SQL needed to add a new equipment unit (`iw_sys_plant_units` + `iw_sys_plant_settings`).
 
 ## Install
 
-[Click to install](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/ak3-sql-builder/AK3-SQL-Builder.user.js) (requires [Tampermonkey](https://www.tampermonkey.net/))
+[Click to install](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js) (requires [Tampermonkey](https://www.tampermonkey.net/))
 
 ## Usage
 
 1. Open the phpMyAdmin frameset on a plant (`*.plants.iwmac.local:*/secure/phpMyAdmin/...`).
-2. The **AK3 SQL Equipment Builder** panel appears top-right. Hide it with `×` (small "AK3 SQL" button reopens it). Drag by the header to reposition.
+2. The **SQL Equipment Import** panel appears top-right. Hide it with `×` (small "AK3 SQL" button reopens it). Drag by the header to reposition.
 3. Pick the equipment type, edit `unit_id` / `unit_name` / `driver_addr`.
 4. Pick `mb_mode`:
    - `0 — RTU` → fills `comm_baudrate` + `comm_parity`.
