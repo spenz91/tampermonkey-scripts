@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.2
+// @version      3.3
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -115,6 +115,8 @@
     #seii-panel .hdr b{font-size:13px}
     #seii-panel .hdr button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:3px;padding:1px 7px;cursor:pointer;margin-left:4px}
     #seii-panel .body{padding:10px;max-height:80vh;overflow-y:auto}
+    #seii-panel.collapsed .body{display:none}
+    #seii-panel.collapsed{width:auto}
     #seii-panel label{display:block;font-weight:600;margin:6px 0 2px}
     #seii-panel input,#seii-panel select,#seii-panel textarea{width:100%;box-sizing:border-box;padding:4px 6px;font:12px monospace;border:1px solid #bbb;border-radius:3px}
     #seii-panel textarea{font-family:Consolas,monospace;font-size:11px;min-height:160px;resize:vertical;white-space:pre}
@@ -137,7 +139,10 @@
     panel.innerHTML = `
       <div class="hdr">
         <b>SQL Equipment Import</b>
-        <span><button id="seii-hide" title="Hide">×</button></span>
+        <span>
+          <button id="seii-collapse" title="Collapse / expand">▸</button>
+          <button id="seii-hide" title="Hide">×</button>
+        </span>
       </div>
       <div class="body">
         <label>Driver template <span class="small">(from GitHub repo)</span></label>
@@ -182,6 +187,18 @@
     const $ = id => document.getElementById(id);
     $('seii-hide').onclick = () => { panel.style.display = 'none'; toggle.style.display = 'block'; };
     toggle.onclick = () => { panel.style.display = ''; toggle.style.display = 'none'; };
+
+    // Default: panel is collapsed when you visit a page; click ▸ (or the title bar) to expand.
+    panel.classList.add('collapsed');
+    function setCollapsed(c) {
+        panel.classList.toggle('collapsed', c);
+        $('seii-collapse').textContent = c ? '▸' : '▾';
+    }
+    $('seii-collapse').onclick = (e) => { e.stopPropagation(); setCollapsed(!panel.classList.contains('collapsed')); };
+    panel.querySelector('.hdr').addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        setCollapsed(!panel.classList.contains('collapsed'));
+    });
 
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
