@@ -10,6 +10,22 @@ A floating panel that overlays the phpMyAdmin frameset on IWMAC plant servers an
 
 Run [db-setup.sql](db-setup.sql) **once** on the Toolbox MariaDB (HeidiSQL / mysql CLI / local phpMyAdmin) — it creates the `sql_equipment_import` database and `templates` table. It can't run via the toolbox-sql API because `CREATE` is blocked there.
 
+## Seeding templates by hand
+
+If you'd rather not use the **Manage templates** UI to upload a `.sql` file, you can paste a pre-wrapped `REPLACE INTO templates …` statement straight into the MariaDB. Example included:
+
+- [seed-SLV_105N4627-v2.sql](seed-SLV_105N4627-v2.sql) — the SLV 105N4627 v2 driver template, wrapped as a single `REPLACE INTO sql_equipment_import.templates` statement (`name='SLV_105N4627-v2'`, `display_name='SLV 105N4627 v2'`, `driver_type='SLV'`).
+
+To wrap any other `.sql` file the same way:
+
+1. Read the file, replace every `'` with `''`.
+2. Wrap it in:
+   ```sql
+   REPLACE INTO `sql_equipment_import`.`templates` (`name`, `display_name`, `driver_type`, `sql_text`) VALUES
+     ('<internal-name>', '<display name>', '<driver_type>', '<escaped sql here>');
+   ```
+3. Paste/run on the Toolbox MariaDB.
+
 ## Architecture
 
 - API: `http://toolbox.iwmac.local:8505/toolbox-sql` (toolbox-sql, allows SELECT/INSERT/UPDATE/DELETE; max 64 KB per request)
