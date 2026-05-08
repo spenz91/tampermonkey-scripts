@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      4.7
+// @version      4.8
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -160,9 +160,10 @@
       <div class="body">
         <label>Driver template</label>
         <div class="row">
-          <select id="seii-tpl" style="flex:1"><option value="">— loading… —</option></select>
+          <input id="seii-search" placeholder="Search templates…" style="flex:1">
           <button id="seii-reload" title="Reload manifest" style="padding:2px 8px;cursor:pointer">↻</button>
         </div>
+        <select id="seii-tpl" style="margin-top:3px;width:100%"><option value="">— loading… —</option></select>
 
         <label class="small" style="margin-top:8px">…or load a .sql from disk</label>
         <input type="file" id="seii-file" accept=".sql,text/plain">
@@ -246,6 +247,15 @@
         $('seii-status').textContent = '';
     }
 
+    function renderTemplateOptions(filter) {
+        const sel = $('seii-tpl');
+        const f = (filter || '').trim().toLowerCase();
+        const items = MANIFEST.map((t, i) => ({ t, i }))
+            .filter(({ t }) => !f || t.display_name.toLowerCase().includes(f) || (t.driver_type || '').toLowerCase().includes(f) || (t.file || '').toLowerCase().includes(f));
+        sel.innerHTML = `<option value="">${items.length ? '— pick template —' : '— no matches —'}</option>` +
+            items.map(({ t, i }) => `<option value="${i}">${escapeHtml(t.display_name)} (${escapeHtml(t.driver_type)})</option>`).join('');
+    }
+
     async function loadManifest() {
         const sel = $('seii-tpl');
         sel.innerHTML = '<option value="">— loading… —</option>';
@@ -253,14 +263,15 @@
             const txt = await gmFetch(MANIFEST_URL);
             const json = JSON.parse(txt);
             MANIFEST = (json && json.templates) || [];
-            sel.innerHTML = '<option value="">— pick template —</option>' +
-                MANIFEST.map((t, i) => `<option value="${i}">${escapeHtml(t.display_name)} (${escapeHtml(t.driver_type)})</option>`).join('');
+            renderTemplateOptions($('seii-search').value);
             $('seii-fileinfo').innerHTML = `<span class="ok">${MANIFEST.length} templates available.</span> Pick one above, or load from disk.`;
         } catch (e) {
             sel.innerHTML = '<option value="">— manifest load failed —</option>';
             $('seii-fileinfo').innerHTML = `<span class="err">Manifest load failed: ${escapeHtml(e.message)}.</span> You can still load a .sql from disk below.`;
         }
     }
+
+    $('seii-search').addEventListener('input', () => renderTemplateOptions($('seii-search').value));
 
     $('seii-reload').onclick = (e) => { e.preventDefault(); loadManifest(); };
 
