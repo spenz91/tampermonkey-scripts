@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      5.2
+// @version      5.3
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -467,8 +467,10 @@
         // 1) Replace iw_sys_plant_units block
         if (CURRENT.units) {
             const cols = CURRENT.units.cols;
+            const templateRaw = units.slice().reverse().find(u => u._raw)?._raw
+                || (CURRENT.units.rows[CURRENT.units.rows.length - 1] || {});
             const rebuilt = units.map(u => {
-                const raw = u._raw || {};
+                const raw = u._raw || templateRaw;
                 const vals = cols.map(col => {
                     if (col === 'row_date') return /NOW\(\)/i.test(raw[col] || '') ? raw[col] : "NOW()";
                     if (col === 'unit_id') return q(u.unit_id);
