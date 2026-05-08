@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      5.1
+// @version      5.2
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -143,6 +143,12 @@
     #seii-panel .err{color:#c53030;font-weight:600}
     #seii-panel .small{font-size:11px;color:#666}
     #seii-toggle{position:fixed;top:12px;right:80px;z-index:2147483647;background:#2b6cb0;color:#fff;border:0;border-radius:4px;padding:4px 9px;cursor:pointer;font:12px -apple-system,Segoe UI,Roboto,Arial,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.25);display:none}
+    #seii-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483647;display:none;align-items:center;justify-content:center}
+    #seii-modal.show{display:flex}
+    #seii-modal .box{background:#fff;width:90vw;height:90vh;border-radius:6px;display:flex;flex-direction:column;overflow:hidden}
+    #seii-modal .mhdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#2b6cb0;color:#fff;font:13px -apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    #seii-modal .mhdr button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:3px;padding:2px 10px;cursor:pointer;margin-left:6px;font:12px -apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    #seii-modal textarea{flex:1;border:0;padding:10px;font:12px Consolas,monospace;white-space:pre;resize:none;outline:none}
     `;
     document.documentElement.appendChild(Object.assign(document.createElement('style'), { textContent: css }));
 
@@ -190,6 +196,7 @@
           <div class="actions">
             <button id="seii-gen" class="primary">Generate SQL</button>
             <button id="seii-copy">Copy</button>
+            <button id="seii-edit" title="Open large editor">Edit ⛶</button>
           </div>
           <div id="seii-status" class="status"></div>
 
@@ -202,6 +209,21 @@
     const toggle = document.createElement('button');
     toggle.id = 'seii-toggle'; toggle.textContent = 'SQL Import';
     document.documentElement.appendChild(toggle);
+
+    const modal = document.createElement('div');
+    modal.id = 'seii-modal';
+    modal.innerHTML = `
+      <div class="box">
+        <div class="mhdr">
+          <b>SQL editor</b>
+          <span>
+            <button id="seii-mcopy">Copy</button>
+            <button id="seii-mclose">Close</button>
+          </span>
+        </div>
+        <textarea id="seii-medit" spellcheck="false"></textarea>
+      </div>`;
+    document.documentElement.appendChild(modal);
 
     const $ = id => document.getElementById(id);
     $('seii-hide').onclick = () => { panel.style.display = 'none'; toggle.style.display = 'block'; };
@@ -504,6 +526,29 @@
             $('seii-status').innerHTML = `<span class="err">${e.message}</span>`;
         }
     };
+    $('seii-edit').onclick = () => {
+        try {
+            let s = $('seii-out').value;
+            if (!s) { s = buildOutput(); $('seii-out').value = s; }
+            $('seii-medit').value = s;
+            $('seii-medit').readOnly = false;
+            modal.classList.add('show');
+            $('seii-medit').focus();
+        } catch (e) {
+            $('seii-status').innerHTML = `<span class="err">${e.message}</span>`;
+        }
+    };
+    $('seii-mclose').onclick = () => {
+        $('seii-out').value = $('seii-medit').value;
+        modal.classList.remove('show');
+    };
+    $('seii-mcopy').onclick = () => {
+        GM_setClipboard($('seii-medit').value);
+        $('seii-mcopy').textContent = 'Copied!';
+        setTimeout(() => $('seii-mcopy').textContent = 'Copy', 1200);
+    };
+    modal.addEventListener('click', e => { if (e.target === modal) $('seii-mclose').click(); });
+
     $('seii-copy').onclick = () => {
         try {
             let s = $('seii-out').value;
