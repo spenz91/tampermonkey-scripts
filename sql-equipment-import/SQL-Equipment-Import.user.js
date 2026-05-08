@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.7
+// @version      3.8
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -27,7 +27,7 @@
         ['3', 'M (Mark)'], ['4', 'S (Space)'],
     ];
     const MB_MODE_OPTS = [['0', 'RTU'], ['2', 'TCP']];
-    const BAUDRATE_OPTS = ['1200', '2400', '4800', '9600', '19200', '38400', '57600', '115200'];
+    const BAUDRATE_OPTS = ['9600', '19200', '38400', '57600', '115200'];
 
     // ---------------- SQL helpers ----------------
     const sqlEsc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "''");
