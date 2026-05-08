@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      4.3
+// @version      4.4
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -40,10 +40,18 @@
             const u = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
             GM_xmlhttpRequest({
                 method: 'GET', url: u, timeout: 30000,
+                responseType: 'arraybuffer',
                 overrideMimeType: 'text/plain; charset=utf-8',
                 onload: r => {
-                    if (r.status >= 200 && r.status < 300) resolve(r.responseText);
-                    else reject(new Error(`HTTP ${r.status} fetching ${url}`));
+                    if (r.status >= 200 && r.status < 300) {
+                        try {
+                            const buf = r.response || r.responseText;
+                            const text = buf instanceof ArrayBuffer
+                                ? new TextDecoder('utf-8').decode(new Uint8Array(buf))
+                                : String(buf);
+                            resolve(text);
+                        } catch (e) { reject(e); }
+                    } else reject(new Error(`HTTP ${r.status} fetching ${url}`));
                 },
                 onerror: () => reject(new Error('Network error fetching ' + url)),
                 ontimeout: () => reject(new Error('Timeout fetching ' + url)),
