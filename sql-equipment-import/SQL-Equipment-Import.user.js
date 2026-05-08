@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      4.8
+// @version      4.9
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -24,7 +24,6 @@
     const EDITABLE_SETTINGS = ['mb_mode', 'comm_baudrate', 'comm_parity'];
     const PARITY_OPTS = [
         ['0', 'N (None)'], ['1', 'O (Odd)'], ['2', 'E (Even)'],
-        ['3', 'M (Mark)'], ['4', 'S (Space)'],
     ];
     const MB_MODE_OPTS = [['0', 'RTU'], ['2', 'TCP']];
     const BAUDRATE_OPTS = ['9600', '19200', '38400', '57600', '115200'];
