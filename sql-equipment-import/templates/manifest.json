@@ -8,6 +8,54 @@
       "file": "SLV_105N4627-v2.sql"
     },
     {
+      "name": "CarloGavazzi_EM4-v1",
+      "display_name": "Carlo Gavazzi EM4 v1",
+      "driver_type": "EM4",
+      "file": "CarloGavazzi_EM4-v1.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM21-v1",
+      "display_name": "Carlo Gavazzi EM21 v1",
+      "driver_type": "EM21",
+      "file": "CarloGavazzi_EM21-v1.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM23-v1",
+      "display_name": "Carlo Gavazzi EM23 v1",
+      "driver_type": "EM23",
+      "file": "CarloGavazzi_EM23-v1.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM24-v1",
+      "display_name": "Carlo Gavazzi EM24 v1",
+      "driver_type": "EM24",
+      "file": "CarloGavazzi_EM24-v1.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM24_TCPIP-v2",
+      "display_name": "Carlo Gavazzi EM24 TCPIP v2",
+      "driver_type": "EM24",
+      "file": "CarloGavazzi_EM24_TCPIP-v2.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM26-v1",
+      "display_name": "Carlo Gavazzi EM26 v1",
+      "driver_type": "EM26",
+      "file": "CarloGavazzi_EM26-v1.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM100-v1",
+      "display_name": "Carlo Gavazzi EM100 v1",
+      "driver_type": "EM100",
+      "file": "CarloGavazzi_EM100-v1.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM210-v2",
+      "display_name": "Carlo Gavazzi EM210 v2",
+      "driver_type": "EM210",
+      "file": "CarloGavazzi_EM210-v2.sql"
+    },
+    {
       "name": "CarloGavazzi_EM270-v2",
       "display_name": "Carlo Gavazzi EM270 v2",
       "driver_type": "EM270",
@@ -18,6 +66,12 @@
       "display_name": "Carlo Gavazzi EM330 v2",
       "driver_type": "EM330",
       "file": "CarloGavazzi_EM330-v2.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM540",
+      "display_name": "Carlo Gavazzi EM540 (EM530)",
+      "driver_type": "EM540",
+      "file": "CarloGavazzi_EM540 (EM530).sql"
     }
   ]
 }
