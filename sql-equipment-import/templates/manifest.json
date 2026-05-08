@@ -3,7 +3,7 @@
   "templates": [
     {
       "name": "SLV_105N4627-v2",
-      "display_name": "SLV AHT, Paris disker",
+      "display_name": "SLV AHT, Paris Plugin-In",
       "driver_type": "SLV",
       "file": "SLV_105N4627-v2.sql"
     },
