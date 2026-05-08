@@ -1,6 +1,6 @@
-REPLACE INTO `iw_sys_plant_units` (`row_date`, `active`, `blockout`, `unit_id`, `unit_name`, `grp_name`, `driver_type`, `driver_addr`, `regulator_type`, `order_no`, `driver_adr_extra`) VALUES 
-(NOW(), '1', '0', 'E01', 'Energi 1', 'cge_em26', 'EM26', '0_1', 'EM26', 'EM26', 0, '');
-(NOW(), '1', '0', 'E02', 'Energi 2', 'cge_em26', 'EM26', '0_2', 'EM26', 'EM26', 0, '');
+REPLACE INTO `iw_sys_plant_units` (`row_date`, `active`, `blockout`, `unit_id`, `unit_name`, `grp_name`, `driver_type`, `driver_addr`, `regulator_type`, `order_no`, `view_order`, `driver_adr_extra`) VALUES
+(NOW(), '1', '0', 'E01', 'Energi 1', 'cge_em26', 'EM26', '0_1', 'EM26', 'EM26', 0, ''),
+(NOW(), '1', '0', 'E02', 'Energi 2', 'cge_em26', 'EM26', '0_2', 'EM26', 'EM26', 0, ''),
 (NOW(), '1', '0', 'E03', 'Energi 3', 'cge_em26', 'EM26', '0_3', 'EM26', 'EM26', 0, '');
 
 REPLACE INTO `iw_sys_plant_settings` (`row_date`, `setting`, `owner`, `value`, `eng_unit`, `help_text`, `help_link`) VALUES 
