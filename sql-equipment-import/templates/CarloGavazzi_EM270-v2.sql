@@ -1,5 +1,5 @@
-﻿REPLACE INTO `iw_sys_plant_units` (`row_date`, `active`, `blockout`, `unit_id`, `unit_name`, `grp_name`, `driver_type`, `driver_addr`, `regulator_type`, `order_no`, `driver_adr_extra`) VALUES 
-(NOW(), '1', '0', 'E01', 'Energi kjÃ¸l/frys', 'cge_em270', 'EM270', '0_1', 'EM270', 'EM270', '');
+REPLACE INTO `iw_sys_plant_units` (`row_date`, `active`, `blockout`, `unit_id`, `unit_name`, `grp_name`, `driver_type`, `driver_addr`, `regulator_type`, `order_no`, `driver_adr_extra`) VALUES 
+(NOW(), '1', '0', 'E01', 'Energi kjøl/frys', 'cge_em270', 'EM270', '0_1', 'EM270', 'EM270', '');
 
 
 REPLACE INTO `iw_sys_plant_settings` (`row_date`, `setting`, `owner`, `value`, `eng_unit`, `help_text`, `help_link`) VALUES 
