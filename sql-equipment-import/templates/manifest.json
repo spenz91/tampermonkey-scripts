@@ -3,7 +3,7 @@
   "templates": [
     {
       "name": "SLV_105N4627-v2",
-      "display_name": "SLV AHT, Paris Plugin-In",
+      "display_name": "SLV AHT, Paris Plug-in",
       "driver_type": "SLV",
       "file": "SLV_105N4627-v2.sql"
     },
