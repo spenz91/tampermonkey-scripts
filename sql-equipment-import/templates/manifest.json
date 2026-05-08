@@ -6,6 +6,12 @@
       "display_name": "SLV 105N4627 v2",
       "driver_type": "SLV",
       "file": "SLV_105N4627-v2.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM270-v2",
+      "display_name": "Carlo Gavazzi EM270 v2",
+      "driver_type": "EM270",
+      "file": "CarloGavazzi_EM270-v2.sql"
     }
   ]
 }
