@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      4.9
+// @version      5.0
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -180,6 +180,12 @@
             <div id="seii-ips"></div>
             <button id="seii-addip" class="small" style="margin-top:3px;padding:2px 8px;cursor:pointer">+ Add IP</button>
           </div>
+
+          <label>SQL command</label>
+          <select id="seii-cmd">
+            <option value="REPLACE INTO" selected>REPLACE INTO</option>
+            <option value="INSERT INTO">INSERT INTO</option>
+          </select>
 
           <div class="actions">
             <button id="seii-gen" class="primary">Generate SQL</button>
@@ -415,7 +421,8 @@
     // ---------- Generate output ----------
     function buildOutput() {
         if (!CURRENT) throw new Error('Load a .sql file first.');
-        let out = CURRENT.sqlText;
+        const cmd = $('seii-cmd') ? $('seii-cmd').value : 'REPLACE INTO';
+        let out = CURRENT.sqlText.replace(/\b(?:REPLACE|INSERT)\s+INTO\b/gi, cmd);
 
         const units = [...$('seii-units').children].map(div => ({
             unit_id: div.querySelector('.seii-uid').value.trim(),
@@ -450,8 +457,9 @@
                 return '(' + vals.join(', ') + ')';
             });
             const colsSql = cols.map(c => '`' + c + '`').join(', ');
-            const block = `REPLACE INTO \`iw_sys_plant_units\` (${colsSql}) VALUES\n${rebuilt.join(',\n')};`;
-            out = out.slice(0, CURRENT.units.start) + block + out.slice(CURRENT.units.end);
+            const block = `${cmd} \`iw_sys_plant_units\` (${colsSql}) VALUES\n${rebuilt.join(',\n')};`;
+            const u2 = parseBlock(out, 'iw_sys_plant_units');
+            if (u2) out = out.slice(0, u2.start) + block + out.slice(u2.end);
         }
 
         // 2) Patch settings (only the editable ones), and inject mb_tcp_servers if TCP
@@ -480,7 +488,7 @@
             }
             const lines = rows.map(r => '(' + cols.map(c => r[c] != null && r[c] !== '' ? r[c] : "''").join(', ') + ')');
             const colsSql = cols.map(c => '`' + c + '`').join(', ');
-            const block = `REPLACE INTO \`iw_sys_plant_settings\` (${colsSql}) VALUES\n${lines.join(',\n')};`;
+            const block = `${cmd} \`iw_sys_plant_settings\` (${colsSql}) VALUES\n${lines.join(',\n')};`;
             out = out.slice(0, settingsBlock.start) + block + out.slice(settingsBlock.end);
         }
 
