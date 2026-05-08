@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      4.6
+// @version      4.7
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -158,7 +158,7 @@
         </span>
       </div>
       <div class="body">
-        <label>Driver template <span class="small">(from GitHub repo)</span></label>
+        <label>Driver template</label>
         <div class="row">
           <select id="seii-tpl" style="flex:1"><option value="">— loading… —</option></select>
           <button id="seii-reload" title="Reload manifest" style="padding:2px 8px;cursor:pointer">↻</button>
@@ -266,7 +266,7 @@
 
     $('seii-tpl').onchange = async () => {
         const idx = $('seii-tpl').value;
-        if (idx === '') return;
+        if (idx === '' || idx === '__local__') return;
         const t = MANIFEST[+idx]; if (!t) return;
         $('seii-fileinfo').textContent = 'Fetching ' + t.file + '…';
         try {
@@ -282,7 +282,16 @@
     $('seii-file').addEventListener('change', e => {
         const f = e.target.files[0]; if (!f) return;
         const fr = new FileReader();
-        fr.onload = () => { $('seii-tpl').value = ''; loadSqlText(f.name, fr.result); };
+        fr.onload = () => {
+            const sel = $('seii-tpl');
+            sel.querySelectorAll('option[data-local="1"]').forEach(o => o.remove());
+            const opt = document.createElement('option');
+            opt.value = '__local__'; opt.dataset.local = '1';
+            opt.textContent = f.name + ' (local file)';
+            sel.insertBefore(opt, sel.firstChild);
+            sel.value = '__local__';
+            loadSqlText(f.name, fr.result);
+        };
         fr.readAsText(f);
     });
 
