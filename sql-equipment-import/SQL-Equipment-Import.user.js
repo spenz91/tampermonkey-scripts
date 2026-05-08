@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.9
+// @version      4.0
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -111,7 +111,7 @@
 
     // ---------------- UI ----------------
     const css = `
-    #seii-panel{position:fixed;top:12px;right:12px;width:460px;z-index:2147483647;background:#fff;border:1px solid #888;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.25);font:12px/1.4 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#222}
+    #seii-panel{position:fixed;top:12px;right:12px;width:460px;min-width:360px;max-width:98vw;max-height:96vh;z-index:2147483647;background:#fff;border:1px solid #888;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.25);font:12px/1.4 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#222;resize:both;overflow:auto}
     #seii-panel .hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#2b6cb0;color:#fff;border-radius:6px 6px 0 0;cursor:move;user-select:none}
     #seii-panel .hdr b{font-size:13px}
     #seii-panel .hdr button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:3px;padding:1px 7px;cursor:pointer;margin-left:4px}
@@ -121,8 +121,6 @@
     #seii-panel label{display:block;font-weight:600;margin:6px 0 2px}
     #seii-panel input,#seii-panel select,#seii-panel textarea{width:100%;box-sizing:border-box;padding:4px 6px;font:12px monospace;border:1px solid #bbb;border-radius:3px}
     #seii-panel textarea{font-family:Consolas,monospace;font-size:11px;min-height:160px;resize:vertical;white-space:pre}
-    #seii-panel.wide{width:90vw;max-width:1400px}
-    #seii-panel.wide textarea{min-height:60vh}
     #seii-panel .row{display:flex;gap:4px;margin-bottom:3px;align-items:center}
     #seii-panel .row input{flex:1}
     #seii-panel .row button{width:28px}
@@ -143,7 +141,6 @@
       <div class="hdr">
         <b>SQL Equipment Import</b>
         <span>
-          <button id="seii-wide" title="Expand / shrink window">⛶</button>
           <button id="seii-collapse" title="Collapse / expand">▸</button>
           <button id="seii-hide" title="Hide">×</button>
         </span>
@@ -199,7 +196,6 @@
         $('seii-collapse').textContent = c ? '▸' : '▾';
     }
     $('seii-collapse').onclick = () => setCollapsed(!panel.classList.contains('collapsed'));
-    $('seii-wide').onclick = () => panel.classList.toggle('wide');
 
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
