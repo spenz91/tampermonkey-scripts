@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.5
+// @version      3.6
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -334,9 +334,26 @@
             if ($('seii-units').children.length > 1) div.remove();
         };
     }
+    function incLastNum(s) {
+        return String(s).replace(/(\d+)(\D*)$/, (_, n, tail) => {
+            const next = String(+n + 1).padStart(n.length, '0');
+            return next + tail;
+        });
+    }
     $('seii-addunit').onclick = (e) => {
         e.preventDefault();
-        addUnitRow({ unit_id: '', unit_name: '', driver_addr: '', _raw: null });
+        const rows = $('seii-units').children;
+        const last = rows[rows.length - 1];
+        if (last) {
+            addUnitRow({
+                unit_id: incLastNum(last.querySelector('.seii-uid').value),
+                unit_name: incLastNum(last.querySelector('.seii-uname').value),
+                driver_addr: incLastNum(last.querySelector('.seii-uaddr').value),
+                _raw: null,
+            });
+        } else {
+            addUnitRow({ unit_id: '', unit_name: '', driver_addr: '', _raw: null });
+        }
     };
 
     function addIpRow(ip) {
