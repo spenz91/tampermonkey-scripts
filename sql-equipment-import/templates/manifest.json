@@ -72,6 +72,48 @@
       "display_name": "Carlo Gavazzi EM540 (EM530)",
       "driver_type": "EM540",
       "file": "CarloGavazzi_EM540 (EM530).sql"
+    },
+    {
+      "name": "Danfoss_AKCC_210B",
+      "display_name": "Danfoss AKCC 210B",
+      "driver_type": "AKCC210B",
+      "file": "Danfoss_AKCC_210B.sql"
+    },
+    {
+      "name": "Danfoss_AKCC_250-v2",
+      "display_name": "Danfoss AKCC 250 v2",
+      "driver_type": "AKCC250",
+      "file": "Danfoss_AKCC_250-v2.sql"
+    },
+    {
+      "name": "Danfoss_AKCC_350_v1",
+      "display_name": "Danfoss AKCC 350 v1",
+      "driver_type": "AKCC350",
+      "file": "Danfoss_AKCC_350_v1.sql"
+    },
+    {
+      "name": "Danfoss_AKCC_550A-v2",
+      "display_name": "Danfoss AKCC 550A v2",
+      "driver_type": "AKCC550A",
+      "file": "Danfoss_AKCC_550A-v2.sql"
+    },
+    {
+      "name": "Danfoss_AKCC_550B-v1",
+      "display_name": "Danfoss AKCC 550B v1",
+      "driver_type": "AKCC550B",
+      "file": "Danfoss_AKCC_550B-v1.sql"
+    },
+    {
+      "name": "Danfoss_AKCC_55_modbus",
+      "display_name": "Danfoss AKCC 55 modbus",
+      "driver_type": "AKCC55",
+      "file": "Danfoss_AKCC_55_modbus.sql"
+    },
+    {
+      "name": "Danfoss_AKPC_420_v1",
+      "display_name": "Danfoss AKPC 420 v1",
+      "driver_type": "AKPC420",
+      "file": "Danfoss_AKPC_420_v1.sql"
     }
   ]
 }
