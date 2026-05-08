@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.6
+// @version      3.7
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -27,6 +27,7 @@
         ['3', 'M (Mark)'], ['4', 'S (Space)'],
     ];
     const MB_MODE_OPTS = [['0', 'RTU'], ['2', 'TCP']];
+    const BAUDRATE_OPTS = ['1200', '2400', '4800', '9600', '19200', '38400', '57600', '115200'];
 
     // ---------------- SQL helpers ----------------
     const sqlEsc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "''");
@@ -303,6 +304,9 @@
                     html += `<select id="${id}">${MB_MODE_OPTS.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${v} — ${t}</option>`).join('')}</select>`;
                 } else if (key === 'comm_parity') {
                     html += `<select id="${id}">${PARITY_OPTS.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${v} — ${t}</option>`).join('')}</select>`;
+                } else if (key === 'comm_baudrate') {
+                    const opts = BAUDRATE_OPTS.includes(cur) || !cur ? BAUDRATE_OPTS : [cur, ...BAUDRATE_OPTS];
+                    html += `<select id="${id}">${opts.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`).join('')}</select>`;
                 } else {
                     html += `<input type="text" id="${id}" value="${escapeHtml(cur)}">`;
                 }
