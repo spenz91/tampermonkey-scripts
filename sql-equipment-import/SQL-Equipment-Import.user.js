@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      4.0
+// @version      4.1
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -111,11 +111,14 @@
 
     // ---------------- UI ----------------
     const css = `
-    #seii-panel{position:fixed;top:12px;right:12px;width:460px;min-width:360px;max-width:98vw;max-height:96vh;z-index:2147483647;background:#fff;border:1px solid #888;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.25);font:12px/1.4 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#222;resize:both;overflow:auto}
+    #seii-panel{position:fixed;top:12px;right:12px;width:460px;height:auto;min-width:360px;min-height:120px;max-width:98vw;max-height:96vh;z-index:2147483647;background:#fff;border:1px solid #888;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.25);font:12px/1.4 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#222;resize:both;overflow:hidden;display:flex;flex-direction:column}
     #seii-panel .hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#2b6cb0;color:#fff;border-radius:6px 6px 0 0;cursor:move;user-select:none}
     #seii-panel .hdr b{font-size:13px}
     #seii-panel .hdr button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:3px;padding:1px 7px;cursor:pointer;margin-left:4px}
-    #seii-panel .body{padding:10px;max-height:80vh;overflow-y:auto}
+    #seii-panel .body{padding:10px;overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column}
+    #seii-panel #seii-form{display:flex;flex-direction:column;flex:1;min-height:0}
+    #seii-panel #seii-form.show{display:flex}
+    #seii-panel #seii-out{flex:1;min-height:120px}
     #seii-panel.collapsed .body{display:none}
     #seii-panel.collapsed{width:auto}
     #seii-panel label{display:block;font-weight:600;margin:6px 0 2px}
