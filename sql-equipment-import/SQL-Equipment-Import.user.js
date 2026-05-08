@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      4.4
+// @version      4.5
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -102,7 +102,7 @@
     }
     function parseBlock(sqlText, table) {
         const re = new RegExp(
-            `REPLACE\\s+INTO\\s+\`${table}\`\\s*\\(([^)]+)\\)\\s*VALUES\\s*([\\s\\S]*?);`,
+            `(?:REPLACE|INSERT)\\s+INTO\\s+\`${table}\`\\s*\\(([^)]+)\\)\\s*VALUES\\s*([\\s\\S]*?);`,
             'i'
         );
         const m = re.exec(sqlText);
