@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      3.4
+// @version      3.5
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -307,6 +307,7 @@
                     html += `<input type="text" id="${id}" value="${escapeHtml(cur)}">`;
                 }
                 const div = document.createElement('div');
+                div.dataset.settingKey = key;
                 div.innerHTML = html;
                 s.appendChild(div);
             }
@@ -351,7 +352,12 @@
 
     function syncTcpVisible() {
         const v = $('seii-set-mb_mode') ? $('seii-set-mb_mode').value : '0';
-        $('seii-tcpwrap').style.display = v === '2' ? '' : 'none';
+        const isTcp = v === '2';
+        $('seii-tcpwrap').style.display = isTcp ? '' : 'none';
+        for (const key of ['comm_baudrate', 'comm_parity']) {
+            const wrap = document.querySelector(`#seii-settings [data-setting-key="${key}"]`);
+            if (wrap) wrap.style.display = isTcp ? 'none' : '';
+        }
     }
 
     // ---------- Generate output ----------
