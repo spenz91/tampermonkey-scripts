@@ -12,6 +12,12 @@
       "display_name": "Carlo Gavazzi EM270 v2",
       "driver_type": "EM270",
       "file": "CarloGavazzi_EM270-v2.sql"
+    },
+    {
+      "name": "CarloGavazzi_EM330-v2",
+      "display_name": "Carlo Gavazzi EM330 v2",
+      "driver_type": "EM330",
+      "file": "CarloGavazzi_EM330-v2.sql"
     }
   ]
 }
