@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.6
+// @version      6.7
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -470,17 +470,32 @@
             if (r) tcpMap = parseTcpServers(unq(r.value));
         }
 
-        // Units — always 3 default rows with driver_addr 0_1, 0_2, 0_3 regardless of template
+        // Units — always 3 default rows. unit_id/unit_name from template examples (first row,
+        // then auto-incremented). driver_addr always 0_1, 0_2, 0_3.
         const u = $('seii-units');
         u.innerHTML = '';
-        const templateRow = (CURRENT.units && CURRENT.units.rows[0]) || null;
+        const templateRows = (CURRENT.units && CURRENT.units.rows) || [];
+        const templateRow = templateRows[0] || null;
+        let lastId = templateRow ? unq(templateRow.unit_id || '') : '';
+        let lastName = templateRow ? unq(templateRow.unit_name || '') : '';
         for (let i = 0; i < 3; i++) {
+            let id, name;
+            if (i < templateRows.length) {
+                id = unq(templateRows[i].unit_id || '');
+                name = unq(templateRows[i].unit_name || '');
+            } else {
+                lastId = incLastNum(lastId);
+                lastName = incLastNum(lastName);
+                id = lastId;
+                name = lastName;
+            }
+            lastId = id; lastName = name;
             addUnitRow({
-                unit_id: '',
-                unit_name: '',
+                unit_id: id,
+                unit_name: name,
                 driver_addr: `0_${i + 1}`,
                 ip: '',
-                _raw: templateRow,
+                _raw: templateRows[i] || templateRow,
             });
         }
 
