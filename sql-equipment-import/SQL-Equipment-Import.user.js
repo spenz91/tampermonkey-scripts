@@ -149,6 +149,10 @@
     #seii-modal .mhdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#2b6cb0;color:#fff;font:13px -apple-system,Segoe UI,Roboto,Arial,sans-serif}
     #seii-modal .mhdr button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:3px;padding:2px 10px;cursor:pointer;margin-left:6px;font:12px -apple-system,Segoe UI,Roboto,Arial,sans-serif}
     #seii-modal textarea{flex:1;border:0;padding:10px;font:12px Consolas,monospace;white-space:pre;resize:none;outline:none}
+    #seii-suggest{position:absolute;top:100%;left:0;right:36px;background:#fff;border:1px solid #888;border-top:0;max-height:220px;overflow-y:auto;z-index:10;display:none}
+    #seii-suggest.show{display:block}
+    #seii-suggest .item{padding:4px 8px;cursor:pointer;font:12px monospace;border-bottom:1px solid #eee}
+    #seii-suggest .item:hover,#seii-suggest .item.active{background:#2b6cb0;color:#fff}
     `;
     document.documentElement.appendChild(Object.assign(document.createElement('style'), { textContent: css }));
 
@@ -164,11 +168,12 @@
       </div>
       <div class="body">
         <label>Driver template</label>
-        <div class="row">
-          <input id="seii-search" placeholder="Search templates…" style="flex:1">
+        <div class="row" style="position:relative">
+          <input id="seii-search" placeholder="Search templates…" autocomplete="off" style="flex:1">
           <button id="seii-reload" title="Reload manifest" style="padding:2px 8px;cursor:pointer">↻</button>
+          <div id="seii-suggest"></div>
         </div>
-        <select id="seii-tpl" size="8" style="margin-top:3px;width:100%;max-height:200px;overflow-y:auto"><option value="">— loading… —</option></select>
+        <select id="seii-tpl" style="margin-top:3px;width:100%"><option value="">— loading… —</option></select>
 
         <label class="small" style="margin-top:8px">…or load a .sql from disk</label>
         <input type="file" id="seii-file" accept=".sql,text/plain">
@@ -298,7 +303,48 @@
         }
     }
 
-    $('seii-search').addEventListener('input', () => renderTemplateOptions($('seii-search').value));
+    function renderSuggest(filter) {
+        const box = $('seii-suggest');
+        const f = (filter || '').trim().toLowerCase();
+        if (!f) { box.classList.remove('show'); box.innerHTML = ''; return; }
+        const items = MANIFEST.map((t, i) => ({ t, i }))
+            .filter(({ t }) => t.display_name.toLowerCase().includes(f) || (t.driver_type || '').toLowerCase().includes(f) || (t.file || '').toLowerCase().includes(f))
+            .slice(0, 12);
+        if (!items.length) { box.classList.remove('show'); box.innerHTML = ''; return; }
+        box.innerHTML = items.map(({ t, i }) => `<div class="item" data-idx="${i}">${escapeHtml(t.display_name)} <span style="opacity:.6">(${escapeHtml(t.driver_type)})</span></div>`).join('');
+        box.classList.add('show');
+    }
+    async function pickTemplate(idx) {
+        const t = MANIFEST[+idx]; if (!t) return;
+        $('seii-tpl').value = String(idx);
+        $('seii-suggest').classList.remove('show');
+        $('seii-fileinfo').textContent = 'Fetching ' + t.file + '…';
+        try {
+            const txt = await gmFetch(REPO_BASE + '/' + encodeURIComponent(t.file));
+            loadSqlText(t.file, txt);
+            $('seii-search').value = t.display_name;
+        } catch (e) {
+            $('seii-fileinfo').innerHTML = `<span class="err">Fetch failed: ${escapeHtml(e.message)}</span>`;
+        }
+    }
+    $('seii-search').addEventListener('input', () => {
+        renderTemplateOptions($('seii-search').value);
+        renderSuggest($('seii-search').value);
+    });
+    $('seii-search').addEventListener('focus', () => renderSuggest($('seii-search').value));
+    $('seii-search').addEventListener('blur', () => setTimeout(() => $('seii-suggest').classList.remove('show'), 150));
+    $('seii-search').addEventListener('keydown', e => {
+        const box = $('seii-suggest'); const items = [...box.querySelectorAll('.item')]; if (!items.length) return;
+        const cur = items.findIndex(it => it.classList.contains('active'));
+        if (e.key === 'ArrowDown') { e.preventDefault(); const n = (cur + 1) % items.length; items.forEach(i => i.classList.remove('active')); items[n].classList.add('active'); items[n].scrollIntoView({ block: 'nearest' }); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); const n = (cur - 1 + items.length) % items.length; items.forEach(i => i.classList.remove('active')); items[n].classList.add('active'); items[n].scrollIntoView({ block: 'nearest' }); }
+        else if (e.key === 'Enter') { e.preventDefault(); const pick = cur >= 0 ? items[cur] : items[0]; pickTemplate(pick.dataset.idx); }
+        else if (e.key === 'Escape') { box.classList.remove('show'); }
+    });
+    $('seii-suggest').addEventListener('mousedown', e => {
+        const it = e.target.closest('.item'); if (!it) return;
+        e.preventDefault(); pickTemplate(it.dataset.idx);
+    });
 
     $('seii-reload').onclick = (e) => { e.preventDefault(); loadManifest(); };
 
