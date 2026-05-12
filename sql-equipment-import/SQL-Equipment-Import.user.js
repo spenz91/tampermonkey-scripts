@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.2
+// @version      6.3
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -302,17 +302,34 @@
     let CURRENT = null; // { name, sqlText, units, settings }
     let MANIFEST = []; // [{name, display_name, driver_type, file}]
 
-    function loadSqlText(name, sqlText) {
-        CURRENT = { name, sqlText };
+    function loadSqlText(name, sqlText, opts) {
+        CURRENT = { name, sqlText, passThrough: !!(opts && opts.passThrough) };
         CURRENT.units = parseBlock(sqlText, 'iw_sys_plant_units');
         CURRENT.settings = parseBlock(sqlText, 'iw_sys_plant_settings');
         $('seii-fileinfo').innerHTML =
             `<span class="ok">Loaded ${escapeHtml(name)}</span> ` +
-            `<span class="small">(${sqlText.length} bytes, ${CURRENT.units ? CURRENT.units.rows.length : 0} unit rows)</span>`;
+            `<span class="small">(${sqlText.length} bytes, ${CURRENT.units ? CURRENT.units.rows.length : 0} unit rows${CURRENT.passThrough ? ', pass-through' : ''})</span>`;
         renderForm();
         $('seii-form').style.display = '';
         $('seii-out').value = '';
         $('seii-status').textContent = '';
+        applyPassThroughVisibility();
+    }
+
+    function applyPassThroughVisibility() {
+        const pt = CURRENT && CURRENT.passThrough;
+        const ids = ['seii-units', 'seii-addunit', 'seii-settings', 'seii-tcpwrap'];
+        for (const id of ids) {
+            const el = $(id); if (!el) continue;
+            el.style.display = pt ? 'none' : '';
+        }
+        // Hide the "Unit rows" + "SQL command" labels too via parent walks
+        document.querySelectorAll('#seii-form > label').forEach(l => {
+            const t = l.textContent.trim();
+            if (pt && (t.startsWith('Unit rows') || t === 'SQL command')) l.style.display = 'none';
+            else l.style.display = '';
+        });
+        const cmd = $('seii-cmd'); if (cmd) cmd.style.display = pt ? 'none' : '';
     }
 
     function renderTemplateOptions(filter) {
@@ -357,7 +374,7 @@
         $('seii-fileinfo').textContent = 'Fetching ' + t.file + '…';
         try {
             const txt = await gmFetch(REPO_BASE + '/' + encodeURIComponent(t.file));
-            loadSqlText(t.file, txt);
+            loadSqlText(t.file, txt, { passThrough: !!t.pass_through });
             $('seii-search').value = t.display_name;
         } catch (e) {
             $('seii-fileinfo').innerHTML = `<span class="err">Fetch failed: ${escapeHtml(e.message)}</span>`;
@@ -391,7 +408,7 @@
         $('seii-fileinfo').textContent = 'Fetching ' + t.file + '…';
         try {
             const txt = await gmFetch(REPO_BASE + '/' + encodeURIComponent(t.file));
-            loadSqlText(t.file, txt);
+            loadSqlText(t.file, txt, { passThrough: !!t.pass_through });
         } catch (e) {
             $('seii-fileinfo').innerHTML = `<span class="err">Fetch failed: ${escapeHtml(e.message)}</span>`;
         }
@@ -577,6 +594,7 @@
     // ---------- Generate output ----------
     function buildOutput() {
         if (!CURRENT) throw new Error('Load a .sql file first.');
+        if (CURRENT.passThrough) return CURRENT.sqlText;
         const cmd = $('seii-cmd') ? $('seii-cmd').value : 'REPLACE INTO';
         let out = CURRENT.sqlText.replace(/\b(?:REPLACE|INSERT)\s+INTO\b/gi, cmd);
 

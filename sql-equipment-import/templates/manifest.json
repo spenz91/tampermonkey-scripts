@@ -5,7 +5,8 @@
                           "name":  "INGICS_param_group_set_and_mqtt_defaults",
                           "display_name":  "INGICS - param - group -set - MQTT Defaults",
                           "driver_type":  "MQTT",
-                          "file":  "INGICS_param_group_set_and_mqtt_defaults.sql"
+                          "file":  "INGICS_param_group_set_and_mqtt_defaults.sql",
+                          "pass_through":  true
                       },
                       {
                           "name":  "ADAM_6015-v1",
