@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      5.4
+// @version      5.5
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -168,7 +168,7 @@
           <input id="seii-search" placeholder="Search templates…" style="flex:1">
           <button id="seii-reload" title="Reload manifest" style="padding:2px 8px;cursor:pointer">↻</button>
         </div>
-        <select id="seii-tpl" style="margin-top:3px;width:100%"><option value="">— loading… —</option></select>
+        <select id="seii-tpl" size="8" style="margin-top:3px;width:100%;max-height:200px;overflow-y:auto"><option value="">— loading… —</option></select>
 
         <label class="small" style="margin-top:8px">…or load a .sql from disk</label>
         <input type="file" id="seii-file" accept=".sql,text/plain">
