@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.1
+// @version      6.2
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -36,7 +36,7 @@
     // ---------------- Config ----------------
     const REPO_BASE = 'https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/templates';
     const MANIFEST_URL = REPO_BASE + '/manifest.json';
-    const EDITABLE_SETTINGS = ['mb_mode', 'comm_baudrate', 'comm_parity'];
+    const EDITABLE_SETTINGS = ['mb_mode', 'comm_port', 'comm_baudrate', 'comm_parity'];
     const PARITY_OPTS = [
         ['0', 'N (None)'], ['1', 'O (Odd)'], ['2', 'E (Even)'],
     ];
@@ -567,7 +567,7 @@
         const v = $('seii-set-mb_mode') ? $('seii-set-mb_mode').value : '0';
         const isTcp = v === '2';
         $('seii-tcpwrap').style.display = 'none';
-        for (const key of ['comm_baudrate', 'comm_parity']) {
+        for (const key of ['comm_port', 'comm_baudrate', 'comm_parity']) {
             const wrap = document.querySelector(`#seii-settings [data-setting-key="${key}"]`);
             if (wrap) wrap.style.display = isTcp ? 'none' : '';
         }
