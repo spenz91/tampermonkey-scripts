@@ -574,7 +574,7 @@
                       },
                       {
                           "name":  "Grundfoss_CIM200-v1",
-                          "display_name":  "Grundfoss CIM200 v1",
+                          "display_name":  "Grundfoss CIM200 v1 (Grundfos magna3)",
                           "driver_type":  "Grundfoss",
                           "file":  "Grundfoss_CIM200-v1.sql"
                       },
