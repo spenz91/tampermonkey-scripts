@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      5.6
+// @version      5.7
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -379,19 +379,46 @@
         fr.readAsText(f);
     });
 
+    function parseTcpServers(value) {
+        // "1;ip;port;...\r\n2;ip;..." or similar → map of serverIdx -> ip (1-based in source, 0-based in driver_addr)
+        const map = {};
+        if (!value) return map;
+        const parts = String(value).replace(/\\r\\n/g, '\n').split(/[\r\n]+/);
+        for (const line of parts) {
+            const cols = line.split(';');
+            if (cols.length >= 2 && /^\d+$/.test(cols[0].trim())) {
+                const idx = parseInt(cols[0], 10) - 1; // 1-based to 0-based
+                map[idx] = cols[1].trim();
+            }
+        }
+        return map;
+    }
+
     function renderForm() {
+        // Pre-parse existing mb_tcp_servers from template (if any) for per-unit IP defaults
+        let tcpMap = {};
+        if (CURRENT.settings) {
+            const r = CURRENT.settings.rows.find(x => unq(x.setting) === 'mb_tcp_servers');
+            if (r) tcpMap = parseTcpServers(unq(r.value));
+        }
+
         // Units
         const u = $('seii-units');
         u.innerHTML = '';
         if (CURRENT.units && CURRENT.units.rows.length) {
-            CURRENT.units.rows.forEach(r => addUnitRow({
-                unit_id: unq(r.unit_id || ''),
-                unit_name: unq(r.unit_name || ''),
-                driver_addr: unq(r.driver_addr || r.driver_adr || ''),
-                _raw: r,
-            }));
+            CURRENT.units.rows.forEach(r => {
+                const addr = unq(r.driver_addr || r.driver_adr || '');
+                const srvIdx = parseInt((addr.match(/^(\d+)/) || [])[1] || '0', 10);
+                addUnitRow({
+                    unit_id: unq(r.unit_id || ''),
+                    unit_name: unq(r.unit_name || ''),
+                    driver_addr: addr,
+                    ip: tcpMap[srvIdx] || '',
+                    _raw: r,
+                });
+            });
         } else {
-            addUnitRow({ unit_id: 'U01', unit_name: '', driver_addr: '0_1', _raw: null });
+            addUnitRow({ unit_id: 'U01', unit_name: '', driver_addr: '0_1', ip: '', _raw: null });
         }
 
         // Settings
@@ -436,12 +463,14 @@
           <input class="seii-uid" placeholder="unit_id" value="${escapeHtml(u.unit_id)}" style="flex:0 0 70px">
           <input class="seii-uname" placeholder="unit_name" value="${escapeHtml(u.unit_name)}">
           <input class="seii-uaddr" placeholder="driver_addr" value="${escapeHtml(u.driver_addr)}" style="flex:0 0 70px">
+          <input class="seii-uip" placeholder="ip address" value="${escapeHtml(u.ip || '')}" style="flex:0 0 130px;display:none">
           <button class="seii-urm" title="Remove">−</button>`;
         div.dataset.raw = u._raw ? JSON.stringify(u._raw) : '';
         $('seii-units').appendChild(div);
         div.querySelector('.seii-urm').onclick = () => {
             if ($('seii-units').children.length > 1) div.remove();
         };
+        syncTcpVisible();
     }
     function incLastNum(s) {
         return String(s).replace(/(\d+)(\D*)$/, (_, n, tail) => {
@@ -466,6 +495,7 @@
                 unit_id: incLastNum(last.querySelector('.seii-uid').value),
                 unit_name: incLastNum(last.querySelector('.seii-uname').value),
                 driver_addr: incAddr(last.querySelector('.seii-uaddr').value),
+                ip: last.querySelector('.seii-uip') ? last.querySelector('.seii-uip').value : '',
                 _raw: null,
             });
         } else {
@@ -487,11 +517,12 @@
     function syncTcpVisible() {
         const v = $('seii-set-mb_mode') ? $('seii-set-mb_mode').value : '0';
         const isTcp = v === '2';
-        $('seii-tcpwrap').style.display = isTcp ? '' : 'none';
+        $('seii-tcpwrap').style.display = 'none';
         for (const key of ['comm_baudrate', 'comm_parity']) {
             const wrap = document.querySelector(`#seii-settings [data-setting-key="${key}"]`);
             if (wrap) wrap.style.display = isTcp ? 'none' : '';
         }
+        document.querySelectorAll('#seii-units .seii-uip').forEach(el => el.style.display = isTcp ? '' : 'none');
     }
 
     // ---------- Generate output ----------
@@ -504,6 +535,7 @@
             unit_id: div.querySelector('.seii-uid').value.trim(),
             unit_name: div.querySelector('.seii-uname').value.trim(),
             driver_addr: div.querySelector('.seii-uaddr').value.trim(),
+            ip: div.querySelector('.seii-uip') ? div.querySelector('.seii-uip').value.trim() : '',
             _raw: div.dataset.raw ? JSON.parse(div.dataset.raw) : null,
         })).filter(u => u.unit_id);
         if (!units.length) throw new Error('At least one unit row is required.');
@@ -515,8 +547,16 @@
         }
         const owner = (CURRENT.settings && CURRENT.settings.owner) || '';
         const isTcp = settingsValues.mb_mode === '2';
-        const ips = [...document.querySelectorAll('.seii-ip')].map(i => i.value.trim()).filter(Boolean);
-        const tcpServers = ips.map((ip, i) => `${i + 1};${ip};502;1000;2;1000`).join('\\r\\n') + (ips.length ? '\\r\\n' : '');
+        // Build mb_tcp_servers from per-unit IPs (one entry per unique server index from driver_addr)
+        const serverMap = new Map();
+        for (const u of units) {
+            const m = u.driver_addr.match(/^(\d+)/);
+            if (!m) continue;
+            const idx = parseInt(m[1], 10);
+            if (u.ip && !serverMap.has(idx)) serverMap.set(idx, u.ip);
+        }
+        const orderedIdx = [...serverMap.keys()].sort((a, b) => a - b);
+        const tcpServers = orderedIdx.map((idx, i) => `${i + 1};${serverMap.get(idx)};502;1000;2;1000`).join('\\r\\n') + (orderedIdx.length ? '\\r\\n' : '');
 
         // 1) Replace iw_sys_plant_units block
         if (CURRENT.units) {
