@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.5
+// @version      6.6
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -470,22 +470,18 @@
             if (r) tcpMap = parseTcpServers(unq(r.value));
         }
 
-        // Units — driver_addr always defaults to 0_1, 0_2, 0_3… regardless of what's in template
+        // Units — always 3 default rows with driver_addr 0_1, 0_2, 0_3 regardless of template
         const u = $('seii-units');
         u.innerHTML = '';
-        if (CURRENT.units && CURRENT.units.rows.length) {
-            CURRENT.units.rows.forEach((r, i) => {
-                const srvIdx = parseInt((unq(r.driver_addr || r.driver_adr || '').match(/^(\d+)/) || [])[1] || '0', 10);
-                addUnitRow({
-                    unit_id: unq(r.unit_id || ''),
-                    unit_name: unq(r.unit_name || ''),
-                    driver_addr: `0_${i + 1}`,
-                    ip: tcpMap[srvIdx] || '',
-                    _raw: r,
-                });
+        const templateRow = (CURRENT.units && CURRENT.units.rows[0]) || null;
+        for (let i = 0; i < 3; i++) {
+            addUnitRow({
+                unit_id: '',
+                unit_name: '',
+                driver_addr: `0_${i + 1}`,
+                ip: '',
+                _raw: templateRow,
             });
-        } else {
-            addUnitRow({ unit_id: 'U01', unit_name: '', driver_addr: '0_1', ip: '', _raw: null });
         }
 
         // Settings
