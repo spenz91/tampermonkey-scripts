@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      5.9
+// @version      6.0
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -519,7 +519,7 @@
                 unit_id: incLastNum(last.querySelector('.seii-uid').value),
                 unit_name: incLastNum(last.querySelector('.seii-uname').value),
                 driver_addr: incAddr(last.querySelector('.seii-uaddr').value),
-                ip: last.querySelector('.seii-uip') ? last.querySelector('.seii-uip').value : '',
+                ip: last.querySelector('.seii-uip') ? incLastNum(last.querySelector('.seii-uip').value || '192.168.10.099') : '',
                 _raw: null,
             });
         } else {
@@ -542,8 +542,9 @@
         const rows = [...$('seii-units').children];
         rows.forEach((div, i) => {
             const addrEl = div.querySelector('.seii-uaddr');
-            if (!addrEl) return;
-            addrEl.value = isTcp ? `${i + 1}_1` : `0_${i + 1}`;
+            if (addrEl) addrEl.value = isTcp ? `${i + 1}_1` : `0_${i + 1}`;
+            const ipEl = div.querySelector('.seii-uip');
+            if (ipEl && isTcp) ipEl.value = `192.168.10.${100 + i}`;
         });
     }
 
