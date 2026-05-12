@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.8
+// @version      6.9
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -333,11 +333,13 @@
 
     function applyPassThroughVisibility() {
         const pt = CURRENT && CURRENT.passThrough;
-        const ids = ['seii-units', 'seii-addunit', 'seii-settings', 'seii-tcpwrap'];
+        const ids = ['seii-units', 'seii-addunit', 'seii-settings'];
         for (const id of ids) {
             const el = $(id); if (!el) continue;
             el.style.display = pt ? 'none' : '';
         }
+        // Legacy mb_tcp_servers section is ALWAYS hidden — IPs live in the unit rows now
+        const tcpwrap = $('seii-tcpwrap'); if (tcpwrap) tcpwrap.style.display = 'none';
         // Hide the "Unit rows" + "SQL command" labels too via parent walks
         document.querySelectorAll('#seii-form > label').forEach(l => {
             const t = l.textContent.trim();
