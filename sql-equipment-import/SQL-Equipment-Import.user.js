@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.7
+// @version      6.8
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -470,32 +470,25 @@
             if (r) tcpMap = parseTcpServers(unq(r.value));
         }
 
-        // Units — always 3 default rows. unit_id/unit_name from template examples (first row,
-        // then auto-incremented). driver_addr always 0_1, 0_2, 0_3.
+        // Units — always 3 default rows. Use the template's first row to detect prefix patterns
+        // (e.g. "E099"/"Energi 99" → prefix "E"/"Energi "), then number from 01, 02, 03.
         const u = $('seii-units');
         u.innerHTML = '';
         const templateRows = (CURRENT.units && CURRENT.units.rows) || [];
         const templateRow = templateRows[0] || null;
-        let lastId = templateRow ? unq(templateRow.unit_id || '') : '';
-        let lastName = templateRow ? unq(templateRow.unit_name || '') : '';
+        const firstId = templateRow ? unq(templateRow.unit_id || '') : '';
+        const firstName = templateRow ? unq(templateRow.unit_name || '') : '';
+        // Strip trailing digits to get the prefix: "E099" → "E", "Energi 99" → "Energi "
+        const idPrefix = (firstId.match(/^(.*?)\d*$/) || ['', ''])[1] || 'U';
+        const namePrefix = (firstName.match(/^(.*?)\d*$/) || ['', ''])[1] || '';
         for (let i = 0; i < 3; i++) {
-            let id, name;
-            if (i < templateRows.length) {
-                id = unq(templateRows[i].unit_id || '');
-                name = unq(templateRows[i].unit_name || '');
-            } else {
-                lastId = incLastNum(lastId);
-                lastName = incLastNum(lastName);
-                id = lastId;
-                name = lastName;
-            }
-            lastId = id; lastName = name;
+            const n = String(i + 1).padStart(2, '0');
             addUnitRow({
-                unit_id: id,
-                unit_name: name,
+                unit_id: idPrefix + n,
+                unit_name: namePrefix ? namePrefix + n : '',
                 driver_addr: `0_${i + 1}`,
                 ip: '',
-                _raw: templateRows[i] || templateRow,
+                _raw: templateRow,
             });
         }
 
