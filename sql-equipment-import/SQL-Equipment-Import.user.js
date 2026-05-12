@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.3
+// @version      6.4
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -118,30 +118,44 @@
         iw_sys_plant_units: ['row_date', 'active', 'blockout', 'unit_id', 'unit_name', 'grp_name', 'driver_type', 'driver_addr', 'regulator_type', 'order_no', 'view_order', 'driver_adr_extra'],
         iw_sys_plant_settings: ['row_date', 'setting', 'owner', 'value', 'eng_unit', 'help_text', 'help_link'],
     };
+    // Find the index of the statement-terminating ';' that is NOT inside a string
+    // or paren. Returns -1 if not found.
+    function findStmtEnd(s, start) {
+        let i = start, depth = 0, inStr = false;
+        while (i < s.length) {
+            const c = s[i];
+            if (inStr) {
+                if (c === "'" && s[i + 1] === "'") { i += 2; continue; }
+                if (c === "'") inStr = false;
+                i++; continue;
+            }
+            if (c === "'") { inStr = true; i++; continue; }
+            if (c === '(') { depth++; i++; continue; }
+            if (c === ')') { depth--; i++; continue; }
+            if (c === ';' && depth === 0) return i;
+            i++;
+        }
+        return -1;
+    }
+
     function parseBlock(sqlText, table) {
-        // Try with explicit column list first
-        const reCols = new RegExp(
-            `(?:REPLACE|INSERT)\\s+INTO\\s+\`${table}\`\\s*\\(([^)]+)\\)\\s*VALUES\\s*([\\s\\S]*?);`,
+        // Locate the header: REPLACE/INSERT INTO `table` [ ( cols ) ] VALUES
+        const reHead = new RegExp(
+            `(?:REPLACE|INSERT)\\s+INTO\\s+\`${table}\`\\s*(?:\\(([^)]+)\\))?\\s*VALUES\\s*`,
             'i'
         );
-        let m = reCols.exec(sqlText);
+        const mh = reHead.exec(sqlText);
+        if (!mh) return null;
+        const valuesStart = mh.index + mh[0].length;
+        const stmtEnd = findStmtEnd(sqlText, valuesStart);
+        if (stmtEnd < 0) return null;
+        const valuesText = sqlText.slice(valuesStart, stmtEnd);
+
         let cols;
-        if (m) {
-            cols = m[1].split(',').map(s => s.trim().replace(/`/g, ''));
-        } else {
-            // Fallback: no column list — use defaults
-            const reNoCols = new RegExp(
-                `(?:REPLACE|INSERT)\\s+INTO\\s+\`${table}\`\\s*VALUES\\s*([\\s\\S]*?);`,
-                'i'
-            );
-            const m2 = reNoCols.exec(sqlText);
-            if (!m2) return null;
-            cols = (DEFAULT_COLS[table] || []).slice();
-            // Patch m to mimic the captured-groups shape
-            m = { 0: m2[0], 1: cols.join(','), 2: m2[1], index: m2.index };
-        }
-        const tuples = extractTuples(m[2]);
-        // Pad cols with placeholders if any tuple has more values
+        if (mh[1]) cols = mh[1].split(',').map(s => s.trim().replace(/`/g, ''));
+        else cols = (DEFAULT_COLS[table] || []).slice();
+
+        const tuples = extractTuples(valuesText);
         const maxLen = tuples.reduce((a, t) => Math.max(a, splitFields(t).length), 0);
         while (cols.length < maxLen) cols.push('col_' + (cols.length + 1));
         const rows = tuples.map(t => {
@@ -150,7 +164,8 @@
             cols.forEach((c, i) => o[c] = f[i] != null ? f[i].trim() : '');
             return o;
         });
-        return { start: m.index, end: m.index + m[0].length, cols, tuples, rows, raw: m[0] };
+        const raw = sqlText.slice(mh.index, stmtEnd + 1);
+        return { start: mh.index, end: stmtEnd + 1, cols, tuples, rows, raw };
     }
 
     // ---------------- UI ----------------
