@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      5.8
+// @version      5.9
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -468,7 +468,10 @@
                 div.innerHTML = html;
                 s.appendChild(div);
             }
-            $('seii-set-mb_mode').addEventListener('change', syncTcpVisible);
+            $('seii-set-mb_mode').addEventListener('change', () => {
+                renumberDriverAddr($('seii-set-mb_mode').value === '2');
+                syncTcpVisible();
+            });
             syncTcpVisible();
         }
 
@@ -534,6 +537,15 @@
         };
     }
     $('seii-addip').onclick = (e) => { e.preventDefault(); addIpRow(''); };
+
+    function renumberDriverAddr(isTcp) {
+        const rows = [...$('seii-units').children];
+        rows.forEach((div, i) => {
+            const addrEl = div.querySelector('.seii-uaddr');
+            if (!addrEl) return;
+            addrEl.value = isTcp ? `${i + 1}_1` : `0_${i + 1}`;
+        });
+    }
 
     function syncTcpVisible() {
         const v = $('seii-set-mb_mode') ? $('seii-set-mb_mode').value : '0';
