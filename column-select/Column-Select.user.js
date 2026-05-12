@@ -2,10 +2,12 @@
 // @name         Column Select (Sublime-style)
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      1.1
+// @version      1.2
 // @description  Hold middle mouse button and drag to select a rectangular column of text (like Sublime). OCRs images/canvases in the selection. Copies result to clipboard.
 // @author       spenz91
 // @match        *://*/*
+// @match        file:///*
+// @include      *
 // @grant        GM_setClipboard
 // @connect      unpkg.com
 // @connect      cdn.jsdelivr.net
