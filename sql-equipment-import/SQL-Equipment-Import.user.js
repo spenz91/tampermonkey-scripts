@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.4
+// @version      6.5
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -470,17 +470,16 @@
             if (r) tcpMap = parseTcpServers(unq(r.value));
         }
 
-        // Units
+        // Units — driver_addr always defaults to 0_1, 0_2, 0_3… regardless of what's in template
         const u = $('seii-units');
         u.innerHTML = '';
         if (CURRENT.units && CURRENT.units.rows.length) {
-            CURRENT.units.rows.forEach(r => {
-                const addr = unq(r.driver_addr || r.driver_adr || '');
-                const srvIdx = parseInt((addr.match(/^(\d+)/) || [])[1] || '0', 10);
+            CURRENT.units.rows.forEach((r, i) => {
+                const srvIdx = parseInt((unq(r.driver_addr || r.driver_adr || '').match(/^(\d+)/) || [])[1] || '0', 10);
                 addUnitRow({
                     unit_id: unq(r.unit_id || ''),
                     unit_name: unq(r.unit_name || ''),
-                    driver_addr: addr,
+                    driver_addr: `0_${i + 1}`,
                     ip: tcpMap[srvIdx] || '',
                     _raw: r,
                 });
@@ -640,7 +639,7 @@
         const orderedIdx = [...serverMap.keys()].sort((a, b) => a - b);
         const tcpServers = orderedIdx.map((idx, i) => `${i + 1};${serverMap.get(idx)};502;1000;2;1000`).join('\\r\\n') + (orderedIdx.length ? '\\r\\n' : '');
 
-        // 1) Replace iw_sys_plant_units block
+        // 1) Replace iw_sys_plant_units block — remove from its original spot and move to the top
         if (CURRENT.units) {
             const cols = CURRENT.units.cols;
             const templateRaw = units.slice().reverse().find(u => u._raw)?._raw
@@ -659,7 +658,13 @@
             const colsSql = cols.map(c => '`' + c + '`').join(', ');
             const block = `${cmd} \`iw_sys_plant_units\` (${colsSql}) VALUES\n${rebuilt.join(',\n')};`;
             const u2 = parseBlock(out, 'iw_sys_plant_units');
-            if (u2) out = out.slice(0, u2.start) + block + out.slice(u2.end);
+            if (u2) {
+                // Remove from original position, then prepend (with trailing blank line for readability)
+                out = out.slice(0, u2.start) + out.slice(u2.end);
+                out = block + '\n\n' + out.replace(/^\s+/, '');
+            } else {
+                out = block + '\n\n' + out.replace(/^\s+/, '');
+            }
         }
 
         // 2) Patch settings (only the editable ones), and inject mb_tcp_servers if TCP
