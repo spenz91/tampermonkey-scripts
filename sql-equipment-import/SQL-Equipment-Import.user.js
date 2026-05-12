@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      5.7
+// @version      5.8
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -99,15 +99,36 @@
         }
         return v;
     }
+    const DEFAULT_COLS = {
+        iw_sys_plant_units: ['row_date', 'active', 'blockout', 'unit_id', 'unit_name', 'grp_name', 'driver_type', 'driver_addr', 'regulator_type', 'order_no', 'view_order', 'driver_adr_extra'],
+        iw_sys_plant_settings: ['row_date', 'setting', 'owner', 'value', 'eng_unit', 'help_text', 'help_link'],
+    };
     function parseBlock(sqlText, table) {
-        const re = new RegExp(
+        // Try with explicit column list first
+        const reCols = new RegExp(
             `(?:REPLACE|INSERT)\\s+INTO\\s+\`${table}\`\\s*\\(([^)]+)\\)\\s*VALUES\\s*([\\s\\S]*?);`,
             'i'
         );
-        const m = re.exec(sqlText);
-        if (!m) return null;
-        const cols = m[1].split(',').map(s => s.trim().replace(/`/g, ''));
+        let m = reCols.exec(sqlText);
+        let cols;
+        if (m) {
+            cols = m[1].split(',').map(s => s.trim().replace(/`/g, ''));
+        } else {
+            // Fallback: no column list — use defaults
+            const reNoCols = new RegExp(
+                `(?:REPLACE|INSERT)\\s+INTO\\s+\`${table}\`\\s*VALUES\\s*([\\s\\S]*?);`,
+                'i'
+            );
+            const m2 = reNoCols.exec(sqlText);
+            if (!m2) return null;
+            cols = (DEFAULT_COLS[table] || []).slice();
+            // Patch m to mimic the captured-groups shape
+            m = { 0: m2[0], 1: cols.join(','), 2: m2[1], index: m2.index };
+        }
         const tuples = extractTuples(m[2]);
+        // Pad cols with placeholders if any tuple has more values
+        const maxLen = tuples.reduce((a, t) => Math.max(a, splitFields(t).length), 0);
+        while (cols.length < maxLen) cols.push('col_' + (cols.length + 1));
         const rows = tuples.map(t => {
             const f = splitFields(t);
             const o = {};
