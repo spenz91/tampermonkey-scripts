@@ -355,7 +355,7 @@ REPLACE INTO `iw_set_cge_em270` (`row_date`, `element_id`, `active`, `onl_ind`, 
 -- Watch out for duplicate unit_id!
 
 REPLACE INTO `iw_sys_plant_units` (`row_date`, `active`, `blockout`, `unit_id`, `unit_name`, `grp_name`, `driver_type`, `driver_addr`, `regulator_type`, `order_no`, `view_order`, `driver_adr_extra`, `unit_extra`) VALUES
-('2026-05-12 15:34:23', '1', '0', 'E01', 'Energi kj�l/frys', 'cge_em270', 'EM270', '0_21', 'EM270', 'EM270', 560, '', '');
+('2026-05-12 15:34:23', '1', '0', 'E01', 'Energi kjøl/frys', 'cge_em270', 'EM270', '0_21', 'EM270', 'EM270', 560, '', '');
 
 
 
