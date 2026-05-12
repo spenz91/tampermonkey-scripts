@@ -2,6 +2,12 @@
     "$schema_comment":  "Drop a .sql template into this folder, then add an entry below. The userscript fetches this manifest at startup and shows display_name in its dropdown.",
     "templates":  [
                       {
+                          "name":  "INGICS_param_group_set_and_mqtt_defaults",
+                          "display_name":  "MQTT - ING",
+                          "driver_type":  "MQTT",
+                          "file":  "INGICS_param_group_set_and_mqtt_defaults.sql"
+                      },
+                      {
                           "name":  "ADAM_6015-v1",
                           "display_name":  "ADAM 6015 v1",
                           "driver_type":  "ADAM",
