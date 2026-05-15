@@ -2,7 +2,7 @@
 // @name         SQL Equipment Import
 // @namespace    https://github.com/spenz91/tampermonkey-scripts
 // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @version      6.9
+// @version      7.0
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
 // @author       spenz91
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
@@ -524,6 +524,8 @@
                 renumberDriverAddr($('seii-set-mb_mode').value === '2');
                 syncTcpVisible();
             });
+            // Always default to RTU on every template load
+            $('seii-set-mb_mode').value = '0';
             syncTcpVisible();
         }
 
