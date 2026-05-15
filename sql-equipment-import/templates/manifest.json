@@ -70,15 +70,9 @@
                       },
                       {
                           "name":  "Belimo v0.1",
-                          "display_name":  "Belimo v0.1",
-                          "driver_type":  "Belimo v0.1",
-                          "file":  "Belimo v0.1.sql"
-                      },
-                      {
-                          "name":  "Belimo_Energy_Valve-v1",
-                          "display_name":  "Belimo Energy Valve v1",
+                          "display_name":  "Belimo VGV v1",
                           "driver_type":  "Belimo",
-                          "file":  "Belimo_Energy_Valve-v1.sql"
+                          "file":  "Belimo v0.1.sql"
                       },
                       {
                           "name":  "Carel_Clima-v1",
@@ -513,10 +507,10 @@
                           "file":  "Dupline-v1.sql"
                       },
                       {
-                          "name":  "EDMK_energimÃ¥ler-v1",
-                          "display_name":  "EDMK energimÃ¥ler v1",
+                          "name":  "EDMK_energimÃƒÂ¥ler-v1",
+                          "display_name":  "EDMK energimÃƒÂ¥ler v1",
                           "driver_type":  "EDMK",
-                          "file":  "EDMK_energimÃ¥ler-v1.sql"
+                          "file":  "EDMK_energimÃƒÂ¥ler-v1.sql"
                       },
                       {
                           "name":  "Eliwell_978_V3",
@@ -687,10 +681,10 @@
                           "file":  "Micro Matics_CVM_E3_MIni.sql"
                       },
                       {
-                          "name":  "MKD_energimÃ¥ler-v1",
-                          "display_name":  "MKD energimÃ¥ler v1",
+                          "name":  "MKD_energimÃƒÂ¥ler-v1",
+                          "display_name":  "MKD energimÃƒÂ¥ler v1",
                           "driver_type":  "MKD",
-                          "file":  "MKD_energimÃ¥ler-v1.sql"
+                          "file":  "MKD_energimÃƒÂ¥ler-v1.sql"
                       },
                       {
                           "name":  "Nemo_96-v1",
@@ -777,10 +771,10 @@
                           "file":  "SCM_HECU_Frys-v1.sql"
                       },
                       {
-                          "name":  "SCM_HECU_KjÃ¸l-v1",
-                          "display_name":  "SCM HECU KjÃ¸l v1",
+                          "name":  "SCM_HECU_KjÃƒÂ¸l-v1",
+                          "display_name":  "SCM HECU KjÃƒÂ¸l v1",
                           "driver_type":  "SCM",
-                          "file":  "SCM_HECU_KjÃ¸l-v1.sql"
+                          "file":  "SCM_HECU_KjÃƒÂ¸l-v1.sql"
                       },
                       {
                           "name":  "Siemens_UH50-v1",
