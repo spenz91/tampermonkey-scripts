@@ -4,7 +4,7 @@
 
 > Requires [Tampermonkey](https://www.tampermonkey.net/) browser extension.
 
-### [Click here to install AK3 Auto Scan](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/ak3-autoscan/AK3-Autoscan.user.js)
+### [Click here to install AK3 Auto Scan](https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/ak3-autoscan/AK3-Autoscan.user.js)
 
 The script auto-updates — when a new version is pushed here, Tampermonkey will update it automatically.
 

@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         SQL Equipment Import
-// @namespace    https://github.com/spenz91/tampermonkey-scripts
-// @homepageURL  https://github.com/spenz91/tampermonkey-scripts
+// @namespace    https://github.com/hapnes-dev/tampermonkey-scripts
+// @homepageURL  https://github.com/hapnes-dev/tampermonkey-scripts
 // @version      7.0
 // @description  Floating panel on phpMyAdmin: pick a driver-template from a GitHub-hosted manifest (or load a .sql file from disk), edit unit rows + Modbus settings (RTU/TCP, multi-IP), emit the full SQL ready to paste into the plant DB. No backend, no DB.
-// @author       spenz91
+// @author       hapnes-dev
 // @match        *://*.plants.iwmac.local:*/secure/phpMyAdmin/*
 // @run-at       document-end
 // @grant        GM_setClipboard
@@ -16,8 +16,8 @@
 // @resource     CM_CSS https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css
 // @resource     CM_THEME https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css
 // @connect      raw.githubusercontent.com
-// @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js
-// @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js
+// @updateURL    https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js
+// @downloadURL  https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js
 // ==/UserScript==
 
 (function () {
@@ -34,7 +34,7 @@
     } catch (e) { /* CodeMirror optional — falls back to plain textarea */ }
 
     // ---------------- Config ----------------
-    const REPO_BASE = 'https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/templates';
+    const REPO_BASE = 'https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/sql-equipment-import/templates';
     const MANIFEST_URL = REPO_BASE + '/manifest.json';
     const EDITABLE_SETTINGS = ['mb_mode', 'comm_port', 'comm_baudrate', 'comm_parity'];
     const PARITY_OPTS = [

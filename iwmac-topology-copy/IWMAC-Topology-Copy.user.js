@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IWMAC Topology Copy
-// @namespace    https://github.com/spenz91/tampermonkey-scripts
-// @homepageURL  https://github.com/spenz91/tampermonkey-scripts
+// @namespace    https://github.com/hapnes-dev/tampermonkey-scripts
+// @homepageURL  https://github.com/hapnes-dev/tampermonkey-scripts
 // @version      1.17
 // @description  Copy the IWMAC sys_tools topology to clipboard, or export to a real .xlsx that merges page tree + Toolbox SQL API with collapsible outline levels.
 // @match        *://*.plants.iwmac.local:8080/secure/sys_tools/*
@@ -9,8 +9,8 @@
 // @grant        GM_xmlhttpRequest
 // @connect      toolbox.iwmac.local
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js
-// @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js
+// @updateURL    https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js
+// @downloadURL  https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js
 // ==/UserScript==
 
 (function () {

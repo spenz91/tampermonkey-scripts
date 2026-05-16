@@ -2,9 +2,9 @@
 
 ## Repo overview
 
-Public GitHub repo: `https://github.com/spenz91/tampermonkey-scripts`
+Public GitHub repo: `https://github.com/hapnes-dev/tampermonkey-scripts`
 Local path: `C:\Users\ThomasKvalvåg\Documents\ak3 scan`
-Owner: spenz91
+Owner: hapnes-dev
 
 A collection of Tampermonkey userscripts with auto-update support. Each script lives in its own subfolder.
 
@@ -31,7 +31,7 @@ Each `.user.js` file has these headers:
 
 URLs follow the pattern:
 ```
-https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/<folder>/<script>.user.js
+https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/<folder>/<script>.user.js
 ```
 
 **IMPORTANT:** You MUST bump `@version` every time you push changes, otherwise users won't get the update.
@@ -61,28 +61,28 @@ git commit -m "Description of changes"
 git push
 ```
 
-The `gh` CLI is installed and authenticated as `spenz91`.
+The `gh` CLI is installed and authenticated as `hapnes-dev`.
 
 ## Adding a new script
 
 1. Create a new folder: `mkdir <script-name>`
 2. Add the `.user.js` file with these required headers:
    ```js
-   // @namespace    https://github.com/spenz91/tampermonkey-scripts
-   // @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-   // @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/<folder>/<script>.user.js
-   // @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/<folder>/<script>.user.js
+   // @namespace    https://github.com/hapnes-dev/tampermonkey-scripts
+   // @homepageURL  https://github.com/hapnes-dev/tampermonkey-scripts
+   // @updateURL    https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/<folder>/<script>.user.js
+   // @downloadURL  https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/<folder>/<script>.user.js
    ```
 3. Add a `README.md` in the folder with an install link and AI reference docs
 4. Add a row to the **root README.md** table:
    ```md
-   | [Script Name](<folder>/) | Description | [Install](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/<folder>/<script>.user.js) |
+   | [Script Name](<folder>/) | Description | [Install](https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/<folder>/<script>.user.js) |
    ```
 5. Commit and push
 
 ## Git config
 
-- Remote: `origin` → `https://github.com/spenz91/tampermonkey-scripts.git`
+- Remote: `origin` → `https://github.com/hapnes-dev/tampermonkey-scripts.git`
 - Branch: `main`
-- Auth: `gh` CLI authenticated as `spenz91`
-- User: `spenz91` / `spenz91@users.noreply.github.com`
+- Auth: `gh` CLI authenticated as `hapnes-dev`
+- User: `hapnes-dev` / `hapnes-dev@users.noreply.github.com`

@@ -9,7 +9,7 @@ Adds two buttons to the IWMAC `sys_tools` topology toolbar:
 
 ## Install
 
-[Click here to install (latest, currently v1.5)](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js)
+[Click here to install (latest, currently v1.5)](https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/iwmac-topology-copy/IWMAC-Topology-Copy.user.js)
 
 After installing, Tampermonkey auto-updates whenever a new version is pushed.
 

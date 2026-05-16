@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Rocketlane Project Notes Column
-// @namespace    https://github.com/spenz91/tampermonkey-scripts
-// @homepageURL  https://github.com/spenz91/tampermonkey-scripts
-// @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-project-notes/rocketlane-project-notes.user.js
-// @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-project-notes/rocketlane-project-notes.user.js
+// @namespace    https://github.com/hapnes-dev/tampermonkey-scripts
+// @homepageURL  https://github.com/hapnes-dev/tampermonkey-scripts
+// @updateURL    https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/rocketlane-project-notes/rocketlane-project-notes.user.js
+// @downloadURL  https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/rocketlane-project-notes/rocketlane-project-notes.user.js
 // @version      1.10.0
 // @description  Adds a writable "Note" column before Status on the Rocketlane Projects list. Persists to toolbox SQL with local fallback, SQL save status on the header, /health test, and a rich editor with inline clickable URLs while you write.
 // @author       Thomas

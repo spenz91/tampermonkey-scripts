@@ -4,7 +4,7 @@
 
 > Requires [Tampermonkey](https://www.tampermonkey.net/) browser extension.
 
-### [Click here to install Rocketlane Enhancer](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-enhancer/rocketlane-enhancer.user.js)
+### [Click here to install Rocketlane Enhancer](https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/rocketlane-enhancer/rocketlane-enhancer.user.js)
 
 The script auto-updates — when a new version is pushed here, Tampermonkey will update it automatically.
 

@@ -7,7 +7,7 @@ Adds a copy button to two places:
 
 Both copy as rich HTML (bold headers + bullet list) with a plain-text fallback, so pasting into rich-text editors like Rocketlane keeps the formatting.
 
-[Install](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/oneflow-copy-products/oneflow-copy-products.user.js)
+[Install](https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/oneflow-copy-products/oneflow-copy-products.user.js)
 
 ## Matches
 

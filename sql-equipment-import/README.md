@@ -6,7 +6,7 @@ No database, no API. Templates are static files in this repo.
 
 ## Install
 
-[Click to install](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js) (requires [Tampermonkey](https://www.tampermonkey.net/))
+[Click to install](https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/sql-equipment-import/SQL-Equipment-Import.user.js) (requires [Tampermonkey](https://www.tampermonkey.net/))
 
 ## Usage
 
@@ -32,7 +32,7 @@ No database, no API. Templates are static files in this repo.
    ```
 3. Commit + push. Click the `↻` button next to the dropdown in the panel (or reload the page) to pick up the new template.
 
-The userscript fetches `manifest.json` and template files from `https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/sql-equipment-import/templates/…` with a cache-buster, so changes are visible immediately after push.
+The userscript fetches `manifest.json` and template files from `https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/sql-equipment-import/templates/…` with a cache-buster, so changes are visible immediately after push.
 
 ## Notes (AI reference)
 

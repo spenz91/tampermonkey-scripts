@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Oneflow + HubSpot Copy Products
-// @namespace    https://github.com/spenz91/tampermonkey-scripts
-// @homepageURL  https://github.com/spenz91/tampermonkey-scripts
+// @namespace    https://github.com/hapnes-dev/tampermonkey-scripts
+// @homepageURL  https://github.com/hapnes-dev/tampermonkey-scripts
 // @version      2.3.7
 // @description  Adds a copy button on Oneflow (copies product description + quantity from the tilbud PDF) and on HubSpot deal pages (copies the Line items card) as rich HTML with bold headers + bullet list.
-// @author       spenz91
+// @author       hapnes-dev
 // @match        https://app.oneflow.com/*
 // @match        https://*.oneflow.com/*
 // @match        https://app.hubspot.com/*
@@ -12,8 +12,8 @@
 // @match        https://*.hubspot.com/*
 // @match        https://*.rocketlane.com/*
 // @grant        GM_setClipboard
-// @updateURL    https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/oneflow-copy-products/oneflow-copy-products.user.js
-// @downloadURL  https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/oneflow-copy-products/oneflow-copy-products.user.js
+// @updateURL    https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/oneflow-copy-products/oneflow-copy-products.user.js
+// @downloadURL  https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/oneflow-copy-products/oneflow-copy-products.user.js
 // @run-at       document-idle
 // ==/UserScript==
 

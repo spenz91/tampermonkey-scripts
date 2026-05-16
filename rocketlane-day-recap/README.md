@@ -6,7 +6,7 @@ Rocketlane's My Timesheet gets a small button that just opens pang with the date
 
 ## Install
 
-[Click here to install](https://raw.githubusercontent.com/spenz91/tampermonkey-scripts/main/rocketlane-day-recap/Rocketlane-Day-Recap.user.js) (requires Tampermonkey).
+[Click here to install](https://raw.githubusercontent.com/hapnes-dev/tampermonkey-scripts/main/rocketlane-day-recap/Rocketlane-Day-Recap.user.js) (requires Tampermonkey).
 
 ## Usage
 
